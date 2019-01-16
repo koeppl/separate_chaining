@@ -8,29 +8,64 @@ constexpr int most_significant_bit(const uint64_t& x) {
     return x == 0 ? -1 : (sizeof(uint64_t)*8-1) - __builtin_clzll(x);
 }
 
+template<class hash_map>
+struct separate_chaining_iterator {
+    public:
+        const hash_map& m_map;
+        size_t m_bucket;
+        size_t m_position;
 
-template<class key_type, class value_type, class hash_type = std::hash<key_type>>
+        std::pair<bool, typename hash_map::value_type> m_pair;
+
+        separate_chaining_iterator(const hash_map& map, size_t bucket, size_t position) 
+            : m_map(map), m_bucket(bucket), m_position(position) {
+            }
+
+        const std::pair<bool, typename hash_map::value_type>* operator->()  {
+            m_pair = m_bucket < m_map.bucket_count() ? std::make_pair(true, m_map.m_values[m_bucket][m_position]) : 
+                std::make_pair(false, typename hash_map::value_type(0));
+            return &m_pair;
+        }
+        bool operator!=(const separate_chaining_iterator o) const {
+            return !( (*this)  == o);
+        }
+        bool operator==(const separate_chaining_iterator o) const {
+            // if(o->m_bucket == -1ULL && this->m_bucket == -1ULL) return true; // both are end()
+            // if(o->m_bucket == -1ULL || this->m_bucket == -1ULL) return false; // one is end()
+            return m_bucket == o.m_bucket && m_position == o.m_position; // compare positions
+        }
+};
+
+namespace separate_chaining {
+    static constexpr size_t MAX_BUCKET_BYTESIZE = 128;
+}
+
+
+template<class key_type, class value_t, class hash_type = std::hash<key_type>>
 class separate_chaining_map {
     public:
-    static constexpr size_t MAX_BUCKETSIZE = 128/sizeof(key_type); //TODO: make constexpr
+    using value_type = value_t;
     using bucketsize_type = uint32_t; //! used for storing the sizes of the buckets
     using size_type = uint64_t; //! used for addressing the i-th bucket
+    using iterator = separate_chaining_iterator<separate_chaining_map<key_type, value_type, hash_type>>;
+
+    static constexpr size_t MAX_BUCKETSIZE = separate_chaining::MAX_BUCKET_BYTESIZE/sizeof(key_type); //TODO: make constexpr
 
     key_type** m_keys = nullptr; //!bucket for keys
     value_type** m_values = nullptr; //! bucket for values
     bucketsize_type* m_bucketsizes = nullptr; //! size of each bucket
     hash_type m_hash; //! hash function
 
-    size_t m_buckets = 0; //! number of buckets
+    size_t m_buckets = 0; //! log_2 of the number of buckets
     size_t m_elements = 0; //! number of stored elements
 
     void clear() { //! empties hash table
-        for(size_t bucket = 0; bucket < m_buckets; ++bucket) {
-            if(m_bucketsizes[bucket] == 0) continue;
-            free(m_keys[bucket]);
-            free(m_values[bucket]);
-        }
         if(m_buckets > 0) {
+            for(size_t bucket = 0; bucket < (1ULL<<m_buckets); ++bucket) {
+                if(m_bucketsizes[bucket] == 0) continue;
+                free(m_keys[bucket]);
+                free(m_values[bucket]);
+            }
             free(m_keys);
             free(m_values);
             free(m_bucketsizes);
@@ -55,7 +90,7 @@ class separate_chaining_map {
 
     //! @see std::unordered_map
     size_type bucket_count() const {
-        return m_buckets;
+        return 1ULL<<m_buckets;
     }
 
     //! @see std::unordered_map
@@ -107,11 +142,11 @@ class separate_chaining_map {
             m_values = reinterpret_cast<value_type**>(malloc(new_size*sizeof(value_type*)));
             m_bucketsizes  = reinterpret_cast<bucketsize_type*>  (malloc(new_size*sizeof(bucketsize_type)));
             std::fill(m_bucketsizes, m_bucketsizes+new_size, 0);
-			m_buckets = new_size;
+            m_buckets = reserve_bits;
         } else {
             separate_chaining_map<key_type, value_type, hash_type> tmp_map;
             tmp_map.reserve(new_size);
-            for(size_t bucket = 0; bucket < m_buckets; ++bucket) {
+            for(size_t bucket = 0; bucket < 1ULL<<m_buckets; ++bucket) {
                 if(m_bucketsizes[bucket] == 0) continue;
                 for(size_t i = 0; i < m_bucketsizes[bucket]; ++i) {
                     tmp_map[m_keys[bucket][i]] =  m_values[bucket][i];
@@ -121,39 +156,13 @@ class separate_chaining_map {
         }
     }
 
-    struct iterator {
-        public:
-        const separate_chaining_map& m_map;
-        size_t m_bucket;
-        size_t m_position;
-
-        std::pair<bool, value_type> m_pair;
-
-        iterator(const separate_chaining_map& map, size_t bucket, size_t position) 
-        : m_map(map), m_bucket(bucket), m_position(position) {
-        }
-        
-        const std::pair<bool, value_type>* operator->()  {
-            m_pair = m_bucket < m_map.bucket_count() ? std::make_pair(true, m_map.m_values[m_bucket][m_position]) : std::make_pair(false, value_type(0));
-            return &m_pair;
-        }
-		bool operator!=(const iterator o) const {
-			return !( (*this)  == o);
-		}
-		bool operator==(const iterator o) const {
-			// if(o->m_bucket == -1ULL && this->m_bucket == -1ULL) return true; // both are end()
-			// if(o->m_bucket == -1ULL || this->m_bucket == -1ULL) return false; // one is end()
-			return m_bucket == o.m_bucket && m_position == o.m_position; // compare positions
-		}
-    };
     const iterator end() const {
         return iterator { *this, -1ULL, -1ULL };
     }
 
     iterator find(const key_type& key) const {
         if(m_buckets == 0) return end();
-        const size_t bucket = m_hash(key) % m_buckets;
-        //TODO should be const size_t bucket = m_hash(key) & ((1ull << m_buckets) - 1ull);
+        const size_t bucket = m_hash(key) & ((1ull << m_buckets) - 1ull);
         const bucketsize_type& bucket_size = m_bucketsizes[bucket];
         const key_type*const bucket_keys = m_keys[bucket];
 
@@ -167,7 +176,7 @@ class separate_chaining_map {
 
     value_type& operator[](const key_type& key) {
         if(m_buckets == 0) reserve(16);
-        const size_t bucket = m_hash(key) % m_buckets;
+        const size_t bucket = m_hash(key) & ((1ULL << m_buckets) - 1ULL);
         bucketsize_type& bucket_size = m_bucketsizes[bucket];
         key_type*& bucket_keys = m_keys[bucket];
         value_type*& bucket_values = m_values[bucket];
@@ -181,7 +190,7 @@ class separate_chaining_map {
 			if(m_elements*10 < max_bucket_count() * bucket_count()) {
 				throw std::runtime_error("The chosen hash function is bad!");
 			}
-            reserve(m_buckets<<1);
+            reserve(1ULL<<(m_buckets+1));
             return operator[](key);
         }
         ++m_elements;
@@ -201,10 +210,4 @@ class separate_chaining_map {
     }
 
     ~separate_chaining_map() { clear(); }
-
-
-
 };
-
-// template< class key_type, class value_type, class hash_type>
-// constexpr size_t separate_chaining_map<key_type,value_type,hash_type>::MAX_BUCKETSIZE;
