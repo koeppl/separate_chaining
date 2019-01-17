@@ -3,13 +3,8 @@
 #include "dcheck.hpp"
 
 #include "separate_chaining_map.hpp"
-#include <tudocomp/util/sdsl_bits.hpp>
 
-//! computes ceil(dividend/divisor)
-template<class T>
-constexpr T ceil_div(const T& dividend, const T& divisor) { 
-   return (dividend + divisor - 1) / divisor;
-}
+
 
 template<class value_t, class hash_type>
 class separate_chaining_map<uint64_t, value_t, hash_type> {

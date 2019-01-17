@@ -81,8 +81,8 @@ void test_random(T& map) {
    TEST(x, random) { y; test_random(map); }
 
 #define COMMA ,
-TEST_MAP(keysplit_adapter, keysplit_adapter<separate_chaining_map<uint64_t COMMA uint16_t COMMA SplitMix>> map)
 TEST_MAP(separate_chaining_map, separate_chaining_map<uint16_t COMMA uint16_t> map)
+TEST_MAP(keysplit_adapter, keysplit_adapter<separate_chaining_map<uint64_t COMMA uint16_t COMMA SplitMix>> map)
 TEST_MAP(separate_chaining_map_int, separate_chaining_map<uint64_t COMMA uint16_t> map(27))
 TEST_MAP(compact_separate_chaining_map, compact_separate_chaining_map<uint16_t COMMA bijective_hash> map(27))
 
