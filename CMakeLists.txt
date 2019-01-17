@@ -13,7 +13,9 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0 -ggdb -D_GLIBCXX_DEBU
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -mtune=native")
 
 add_subdirectory(external/bit_span)
+add_subdirectory(external/compact_sparse_hash)
 include_directories(external/bit_span/include)
+include_directories(external/compact_sparse_hash/include)
 
  
 ##########

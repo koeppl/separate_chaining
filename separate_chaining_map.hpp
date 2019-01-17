@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <limits>
 
 //! returns the most significant bit
 constexpr int most_significant_bit(const uint64_t& x) {
@@ -38,6 +39,7 @@ struct separate_chaining_iterator {
 
 namespace separate_chaining {
     static constexpr size_t MAX_BUCKET_BYTESIZE = 128;
+    static constexpr size_t INITIAL_BUCKETS = 16;
 }
 
 
@@ -50,6 +52,7 @@ class separate_chaining_map {
     using iterator = separate_chaining_iterator<separate_chaining_map<key_type, value_type, hash_type>>;
 
     static constexpr size_t MAX_BUCKETSIZE = separate_chaining::MAX_BUCKET_BYTESIZE/sizeof(key_type); //TODO: make constexpr
+    static_assert(MAX_BUCKETSIZE < std::numeric_limits<bucketsize_type>::max(), "enlarge separate_chaining::MAX_BUCKET_BYTESIZE for this key type!");
 
     key_type** m_keys = nullptr; //!bucket for keys
     value_type** m_values = nullptr; //! bucket for values
@@ -175,7 +178,7 @@ class separate_chaining_map {
     }
 
     value_type& operator[](const key_type& key) {
-        if(m_buckets == 0) reserve(16);
+        if(m_buckets == 0) reserve(separate_chaining::INITIAL_BUCKETS);
         const size_t bucket = m_hash(key) & ((1ULL << m_buckets) - 1ULL);
         bucketsize_type& bucket_size = m_bucketsizes[bucket];
         key_type*& bucket_keys = m_keys[bucket];

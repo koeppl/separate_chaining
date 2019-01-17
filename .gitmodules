@@ -1,3 +1,6 @@
 [submodule "external/bit_span"]
 	path = external/bit_span
 	url = https://github.com/tudocomp/bit_span.git
+[submodule "external/compact_sparse_hash"]
+	path = external/compact_sparse_hash
+	url = https://github.com/tudocomp/compact_sparse_hash
