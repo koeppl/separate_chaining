@@ -47,6 +47,10 @@ class compact_separate_chaining_map {
 
     public:
 
+    //! returns the maximum value of a key that can be stored
+    key_type max_key() const { return (-1ULL) >> (64-m_width); }
+
+
     //! @see std::unordered_map
     bool empty() const { return m_elements == 0; } 
 
@@ -215,6 +219,7 @@ class compact_separate_chaining_map {
             }
         }
 #ifndef NDEBUG
+        DCHECK_LE(key, max_key());
         bucket_plainkeys[bucket_size-1] = key;
         DCHECK_LE(most_significant_bit(hash_value >> m_buckets), key_bitwidth);// TODO: / wrong, use '<<'!
 #endif

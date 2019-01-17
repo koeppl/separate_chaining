@@ -51,6 +51,9 @@ class separate_chaining_map<uint64_t, value_t, hash_type> {
 
     public:
 
+    //! returns the maximum value of a key that can be stored
+    key_type max_key() const { return (-1ULL) >> (64-m_width); }
+
     //! @see std::unordered_map
     bool empty() const { return m_elements == 0; } 
 
@@ -210,6 +213,7 @@ class separate_chaining_map<uint64_t, value_t, hash_type> {
                 bucket_keys   = reinterpret_cast<key_type*>  (realloc(bucket_keys, sizeof(key_type)*ceil_div<bucketsize_type>(bucket_size*m_width, 64) ));
             }
         }
+        DCHECK_LE(key, max_key());
 #ifndef NDEBUG
         bucket_plainkeys[bucket_size-1] = key;
 #endif

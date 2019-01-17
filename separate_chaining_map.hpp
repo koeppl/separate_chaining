@@ -43,10 +43,12 @@ namespace separate_chaining {
 }
 
 
-template<class key_type, class value_t, class hash_type = std::hash<key_type>>
+template<class key_t, class value_t, class hash_t = std::hash<key_t>>
 class separate_chaining_map {
     public:
+    using key_type = key_t;
     using value_type = value_t;
+    using hash_type = hash_t;
     using bucketsize_type = uint32_t; //! used for storing the sizes of the buckets
     using size_type = uint64_t; //! used for addressing the i-th bucket
     using iterator = separate_chaining_iterator<separate_chaining_map<key_type, value_type, hash_type>>;
@@ -77,6 +79,9 @@ class separate_chaining_map {
     }
 
     public:
+
+    //! returns the maximum value of a key that can be stored
+    constexpr key_type max_key() const { return std::numeric_limits<key_type>::max(); }
 
     //! @see std::unordered_map
     bool empty() const { return m_elements == 0; } 
