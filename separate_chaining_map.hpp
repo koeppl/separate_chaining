@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include "dcheck.hpp"
 
 //! returns the most significant bit
 constexpr int most_significant_bit(const uint64_t& x) {
@@ -42,6 +43,61 @@ namespace separate_chaining {
     static constexpr size_t INITIAL_BUCKETS = 16;
 }
 
+#ifdef NDEBUG
+#define ON_DEBUG(x)
+#else
+#define ON_DEBUG(x) x
+#endif
+
+template<class key_t>
+class plain_key_bucket {
+    using key_type = key_t;
+
+    key_type* m_keys = nullptr; //!bucket for keys
+
+    ON_DEBUG(size_t m_length;)
+
+        void clear() {
+        if(m_keys != nullptr) {
+        free(m_keys);
+        }
+        m_keys = nullptr;
+        }
+    
+    public:
+    plain_key_bucket() = default;
+
+
+    void resize(const size_t size) {
+        m_keys = reinterpret_cast<key_type*>  (realloc(m_keys, sizeof(key_type)*size));
+        ON_DEBUG(m_length = size;)
+    }
+
+    key_type& operator[](size_t i) {
+        DCHECK_LT(i, m_length);
+        return m_keys[i];
+    }
+
+    const key_type& operator[](size_t i) const {
+        DCHECK_LT(i, m_length);
+        return m_keys[i];
+    }
+
+    ~plain_key_bucket() { clear(); }
+
+    plain_key_bucket(plain_key_bucket&& other) 
+        : m_keys(std::swap(other.m_keys))
+    {
+        other.m_keys = nullptr;
+    }
+
+    plain_key_bucket& operator=(plain_key_bucket&& other) {
+        clear();
+        m_keys = std::move(other.m_keys);
+        other.m_keys = nullptr;
+    }
+};
+
 
 template<class key_t, class value_t, class hash_t = std::hash<key_t>>
 class separate_chaining_map {
@@ -56,7 +112,8 @@ class separate_chaining_map {
     static constexpr size_t MAX_BUCKETSIZE = separate_chaining::MAX_BUCKET_BYTESIZE/sizeof(key_type); //TODO: make constexpr
     static_assert(MAX_BUCKETSIZE < std::numeric_limits<bucketsize_type>::max(), "enlarge separate_chaining::MAX_BUCKET_BYTESIZE for this key type!");
 
-    key_type** m_keys = nullptr; //!bucket for keys
+    
+    plain_key_bucket<key_type>* m_keys = nullptr;
     value_type** m_values = nullptr; //! bucket for values
     bucketsize_type* m_bucketsizes = nullptr; //! size of each bucket
     hash_type m_hash; //! hash function
@@ -68,10 +125,9 @@ class separate_chaining_map {
         if(m_buckets > 0) {
             for(size_t bucket = 0; bucket < (1ULL<<m_buckets); ++bucket) {
                 if(m_bucketsizes[bucket] == 0) continue;
-                free(m_keys[bucket]);
                 free(m_values[bucket]);
             }
-            free(m_keys);
+            delete [] m_keys;
             free(m_values);
             free(m_bucketsizes);
         }
@@ -146,7 +202,7 @@ class separate_chaining_map {
         const size_t new_size = 1ULL<<reserve_bits;
 
         if(m_buckets == 0) {
-            m_keys   = reinterpret_cast<key_type**>  (malloc(new_size*sizeof(key_type*)));
+            m_keys   = new plain_key_bucket<key_type>[new_size];
             m_values = reinterpret_cast<value_type**>(malloc(new_size*sizeof(value_type*)));
             m_bucketsizes  = reinterpret_cast<bucketsize_type*>  (malloc(new_size*sizeof(bucketsize_type)));
             std::fill(m_bucketsizes, m_bucketsizes+new_size, 0);
@@ -172,7 +228,7 @@ class separate_chaining_map {
         if(m_buckets == 0) return end();
         const size_t bucket = m_hash(key) & ((1ull << m_buckets) - 1ull);
         const bucketsize_type& bucket_size = m_bucketsizes[bucket];
-        const key_type*const bucket_keys = m_keys[bucket];
+        const plain_key_bucket<key_type>& bucket_keys = m_keys[bucket];
 
         for(size_t i = 0; i < bucket_size; ++i) { // needed?
             if(bucket_keys[i] == key) {
@@ -186,7 +242,7 @@ class separate_chaining_map {
         if(m_buckets == 0) reserve(separate_chaining::INITIAL_BUCKETS);
         const size_t bucket = m_hash(key) & ((1ULL << m_buckets) - 1ULL);
         bucketsize_type& bucket_size = m_bucketsizes[bucket];
-        key_type*& bucket_keys = m_keys[bucket];
+        plain_key_bucket<key_type>& bucket_keys = m_keys[bucket];
         value_type*& bucket_values = m_values[bucket];
 
         for(size_t i = 0; i < bucket_size; ++i) { // needed?
@@ -206,11 +262,11 @@ class separate_chaining_map {
 
         if(bucket_size == 0) {
             bucket_size = 1;
-            bucket_keys   = reinterpret_cast<key_type*>  (malloc(sizeof(key_type)));
+            bucket_keys.resize(1);
             bucket_values = reinterpret_cast<value_type*>(malloc(sizeof(value_type)));
         } else {
             ++bucket_size;
-            bucket_keys   = reinterpret_cast<key_type*>  (realloc(bucket_keys, sizeof(key_type)*bucket_size));
+            bucket_keys.resize(bucket_size);
             bucket_values = reinterpret_cast<value_type*>(realloc(bucket_values, sizeof(value_type)*bucket_size));
         }
         bucket_keys[bucket_size-1] = key;
@@ -218,4 +274,5 @@ class separate_chaining_map {
     }
 
     ~separate_chaining_map() { clear(); }
+
 };
