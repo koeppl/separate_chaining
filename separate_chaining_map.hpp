@@ -10,7 +10,7 @@
 namespace separate_chaining {
     static constexpr size_t MAX_BUCKET_BYTESIZE = 128;
     static constexpr size_t INITIAL_BUCKETS = 16;
-    static constexpr size_t FAIL_PERCENTAGE = 10;
+    static constexpr size_t FAIL_PERCENTAGE = 20;
 }
 
 
@@ -62,8 +62,14 @@ class separate_chaining_map {
     using class_type = separate_chaining_map<bucket_type, value_type, hash_mapping_type>;
     using iterator = separate_chaining_iterator<class_type>;
 
-    static constexpr size_t MAX_BUCKETSIZE = separate_chaining::MAX_BUCKET_BYTESIZE/sizeof(key_type); //TODO: make constexpr
-    static_assert(MAX_BUCKETSIZE < std::numeric_limits<bucketsize_type>::max(), "enlarge separate_chaining::MAX_BUCKET_BYTESIZE for this key type!");
+    size_t max_bucketsize() const { //! largest number of elements a bucket can contain before enlarging the hash table
+        const size_t ret = separate_chaining::MAX_BUCKET_BYTESIZE/m_width;
+        DCHECK_LT(ret, std::numeric_limits<bucketsize_type>::max());
+        return ret;
+    }
+
+    // static constexpr size_t MAX_BUCKETSIZE = separate_chaining::MAX_BUCKET_BYTESIZE/sizeof(key_type); //TODO: make constexpr
+    // static_assert(MAX_BUCKETSIZE < std::numeric_limits<bucketsize_type>::max(), "enlarge separate_chaining::MAX_BUCKET_BYTESIZE for this key type!");
 
     ON_DEBUG(key_type** m_plainkeys = nullptr;) //!bucket for keys in plain format for debugging purposes
 
@@ -87,6 +93,7 @@ class separate_chaining_map {
             free(m_bucketsizes);
         }
         m_buckets = 0;
+        m_elements = 0;
     }
 
     public:
@@ -105,7 +112,9 @@ class separate_chaining_map {
 
     //! @see std::unordered_map
     bucketsize_type max_bucket_count() const {
-        return MAX_BUCKETSIZE;
+        const size_t ret = separate_chaining::MAX_BUCKET_BYTESIZE*16/m_width;
+        DCHECK_LT(ret, std::numeric_limits<bucketsize_type>::max());
+        return ret;
     }
 
     //! @see std::unordered_map
@@ -119,7 +128,7 @@ class separate_chaining_map {
     }
 
     separate_chaining_map(size_t width = sizeof(key_type)/8) : m_width(width), m_hash(m_width) {
-        DCHECK_LE(width*8, sizeof(key_type));
+        DCHECK_LE(width, sizeof(key_type)*8);
     }
 
     separate_chaining_map(separate_chaining_map&& other)
@@ -237,7 +246,7 @@ class separate_chaining_map {
                 return bucket_values[i];
             }
         }
-        if(bucket_size == MAX_BUCKETSIZE) {
+        if(bucket_size == max_bucket_count()) {
 			if(m_elements*separate_chaining::FAIL_PERCENTAGE < max_bucket_count() * bucket_count()) {
 				throw std::runtime_error("The chosen hash function is bad!");
 			}

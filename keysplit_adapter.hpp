@@ -43,7 +43,8 @@ class keysplit_adapter {
 
     //! @see std::unordered_map
     std::size_t size() const {
-       return std::accumulate(m_maps, m_maps+m_length, 0, [] (const map_type*const v) { return v->size(); });
+       // return m_maps[0]->size();
+       return std::accumulate(m_maps, m_maps+m_length, std::size_t(0), [] (std::size_t sum, const map_type* const& v) { return sum+v->size(); });
     }
 
     const iterator end() const {
