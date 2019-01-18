@@ -7,6 +7,12 @@
 #include <sstream>
 #include <stdexcept>
 
+#ifdef NDEBUG
+#define ON_DEBUG(x)
+#else
+#define ON_DEBUG(x) x
+#endif
+
 #ifndef DCHECK
 #ifdef NDEBUG
 #define DCHECK_(x,y,z)

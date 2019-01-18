@@ -4,12 +4,16 @@
 #include <functional>
 #include <limits>
 #include "dcheck.hpp"
-#include <tudocomp/util/sdsl_bits.hpp>
+#include "hash.hpp"
+#include "bucket.hpp"
 
-//! returns the most significant bit
-constexpr int most_significant_bit(const uint64_t& x) {
-    return x == 0 ? -1 : (sizeof(uint64_t)*8-1) - __builtin_clzll(x);
+namespace separate_chaining {
+    static constexpr size_t MAX_BUCKET_BYTESIZE = 128;
+    static constexpr size_t INITIAL_BUCKETS = 16;
+    static constexpr size_t FAIL_PERCENTAGE = 10;
 }
+
+
 
 template<class hash_map>
 struct separate_chaining_iterator {
@@ -39,174 +43,38 @@ struct separate_chaining_iterator {
         }
 };
 
-namespace separate_chaining {
-    static constexpr size_t MAX_BUCKET_BYTESIZE = 128;
-    static constexpr size_t INITIAL_BUCKETS = 16;
-}
-
-#ifdef NDEBUG
-#define ON_DEBUG(x)
-#else
-#define ON_DEBUG(x) x
-#endif
-
-template<class key_t>
-class plain_key_bucket {
-    using key_type = key_t;
-
-    key_type* m_keys = nullptr; //!bucket for keys
-
-    ON_DEBUG(size_t m_length;)
-
-    void clear() {
-        if(m_keys != nullptr) {
-            free(m_keys);
-        }
-        m_keys = nullptr;
-    }
-
-    public:
-    plain_key_bucket() = default;
-
-    void initiate() {
-        m_keys = reinterpret_cast<key_type*>  (malloc(sizeof(key_type)));
-        ON_DEBUG(m_length = 1;)
-    }
-
-    void increment_size(const size_t size, [[maybe_unused]] const size_t width) {
-        m_keys = reinterpret_cast<key_type*>  (realloc(m_keys, sizeof(key_type)*size));
-        ON_DEBUG(m_length = size;)
-    }
-
-    void write(const size_t i, const key_type& key, [[maybe_unused]] const uint_fast8_t width) {
-        DCHECK_LT(i, m_length);
-        m_keys[i] = key;
-    }
-    key_type read(size_t i, [[maybe_unused]]  size_t width) const {
-        DCHECK_LT(i, m_length);
-        return m_keys[i];
-    }
-    size_t find(const key_type& key, const size_t length, [[maybe_unused]] const size_t width) const {
-       for(size_t i = 0; i < length; ++i) {
-          if(m_keys[i] == key) return i;
-       }
-       return -1ULL;
-    }
-
-    ~plain_key_bucket() { clear(); }
-
-    plain_key_bucket(plain_key_bucket&& other) 
-        : m_keys(std::move(other.m_keys))
-    {
-        other.m_keys = nullptr;
-    }
-
-    plain_key_bucket& operator=(plain_key_bucket&& other) {
-        clear();
-        m_keys = std::move(other.m_keys);
-        other.m_keys = nullptr;
-    }
-};
-
-//! computes ceil(dividend/divisor)
-template<class T>
-constexpr T ceil_div(const T& dividend, const T& divisor) { 
-   return (dividend + divisor - 1) / divisor;
-}
 
 
-template<class key_t>
-class varwidth_key_bucket {
-    using key_type = uint64_t;
 
-    key_type* m_keys = nullptr; //!bucket for keys
-
-    ON_DEBUG(size_t m_length;)
-
-    void clear() {
-        if(m_keys != nullptr) {
-            free(m_keys);
-        }
-        m_keys = nullptr;
-    }
-
-    public:
-    varwidth_key_bucket() = default;
-
-    void initiate() {
-        m_keys = reinterpret_cast<key_type*>  (malloc(sizeof(key_type)));
-        ON_DEBUG(m_length = 1;)
-    }
-
-    void increment_size(const size_t size, const size_t width) {
-       if(ceil_div<size_t>((size-1)*width, 64) < ceil_div<size_t>((size)*width, 64)) {
-          m_keys = reinterpret_cast<key_type*>  (realloc(m_keys, sizeof(key_type)*ceil_div<size_t>(size*width, 64) ));
-       }
-       ON_DEBUG(m_length = size;)
-    }
-
-    void write(const size_t i, const key_type& key, const uint_fast8_t width) {
-        DCHECK_LT((static_cast<size_t>(i)*width)/64 + ((i)* width) % 64, 64*ceil_div<size_t>(m_length*width, 64) );
-
-        tdc::tdc_sdsl::bits_impl<>::write_int(m_keys + (static_cast<size_t>(i)*width)/64, key, ((i)* width) % 64, width);
-        DCHECK_EQ(tdc::tdc_sdsl::bits_impl<>::read_int(m_keys + (static_cast<size_t>(i)*width)/64, ((i)* width) % 64, width), key);
-    }
-    key_type read(size_t i, size_t width) const {
-        return tdc::tdc_sdsl::bits_impl<>::read_int(m_keys + (static_cast<size_t>(i)*width)/64, ((i)* width) % 64, width);
-    }
-
-    size_t find(const key_type& key, const size_t length, const size_t width) const {
-       DCHECK_LE(length, m_length);
-       uint8_t offset = 0;
-       const key_type* it = m_keys;
-
-       for(size_t i = 0; i < length; ++i) { // needed?
-            const key_type read_key = tdc::tdc_sdsl::bits_impl<>::read_int_and_move(it, offset, width);
-            //DCHECK_EQ(read_key , bucket_plainkeys[i]);
-            if(read_key == key) {
-                return i;
-            }
-        }
-       return -1ULL;
-    }
-
-
-    ~varwidth_key_bucket() { clear(); }
-
-    varwidth_key_bucket(varwidth_key_bucket&& other) 
-        : m_keys(std::move(other.m_keys))
-    {
-        other.m_keys = nullptr;
-    }
-
-    varwidth_key_bucket& operator=(varwidth_key_bucket&& other) {
-        clear();
-        m_keys = std::move(other.m_keys);
-        other.m_keys = nullptr;
-    }
-};
-
-
-template<class key_t, class value_t, class hash_t = std::hash<key_t>>
+template<class bucket_t, class value_t, class hash_mapping_t>
 class separate_chaining_map {
     public:
-    using key_type = key_t;
+    using bucket_type = bucket_t;
     using value_type = value_t;
-    using hash_type = hash_t;
+    using hash_mapping_type = hash_mapping_t;
+
+    using key_type = typename bucket_type::key_type;
+    // static_assert(std::is_same<key_type, typename hash_mapping_t::key_type>::value, "key types of bucket and hash_mapping mismatch!") ;
+    static_assert(std::numeric_limits<key_type>::max() <= std::numeric_limits<typename hash_mapping_t::key_type>::max(), "key types of bucket must have at most as many bits as key type of hash_mapping!") ;
+
     using bucketsize_type = uint32_t; //! used for storing the sizes of the buckets
     using size_type = uint64_t; //! used for addressing the i-th bucket
-    using iterator = separate_chaining_iterator<separate_chaining_map<key_type, value_type, hash_type>>;
+    using class_type = separate_chaining_map<bucket_type, value_type, hash_mapping_type>;
+    using iterator = separate_chaining_iterator<class_type>;
 
     static constexpr size_t MAX_BUCKETSIZE = separate_chaining::MAX_BUCKET_BYTESIZE/sizeof(key_type); //TODO: make constexpr
     static_assert(MAX_BUCKETSIZE < std::numeric_limits<bucketsize_type>::max(), "enlarge separate_chaining::MAX_BUCKET_BYTESIZE for this key type!");
 
-    varwidth_key_bucket<key_type>* m_keys = nullptr;
+    ON_DEBUG(key_type** m_plainkeys = nullptr;) //!bucket for keys in plain format for debugging purposes
+
+    bucket_t* m_keys = nullptr; //!bucket for keys
     value_type** m_values = nullptr; //! bucket for values
     bucketsize_type* m_bucketsizes = nullptr; //! size of each bucket
-    hash_type m_hash; //! hash function
 
     size_t m_buckets = 0; //! log_2 of the number of buckets
     size_t m_elements = 0; //! number of stored elements
+    const uint_fast8_t m_width;
+    hash_mapping_type m_hash; //! hash function
 
     void clear() { //! empties hash table
         if(m_buckets > 0) {
@@ -222,10 +90,10 @@ class separate_chaining_map {
     }
 
     public:
-    constexpr uint_fast8_t width() const { return sizeof(uint64_t)*8; }
 
     //! returns the maximum value of a key that can be stored
-    constexpr key_type max_key() const { return std::numeric_limits<key_type>::max(); }
+    key_type max_key() const { return (-1ULL) >> (64-m_width); }
+
 
     //! @see std::unordered_map
     bool empty() const { return m_elements == 0; } 
@@ -250,16 +118,17 @@ class separate_chaining_map {
         return m_bucketsizes[n];
     }
 
-    separate_chaining_map() {
+    separate_chaining_map(size_t width = sizeof(key_type)/8) : m_width(width), m_hash(m_width) {
+        DCHECK_LE(width*8, sizeof(key_type));
     }
 
     separate_chaining_map(separate_chaining_map&& other)
        : m_keys(std::move(other.m_keys))
        , m_values(std::move(other.m_values))
        , m_bucketsizes(std::move(other.m_bucketsizes))
-       , m_hash(std::move(other.m_hash))
        , m_buckets(std::move(other.m_buckets))
        , m_elements(std::move(other.m_elements))
+       , m_hash(std::move(other.m_hash))
     {
         other.m_buckets = 0; //! a hash map without buckets is already deleted
     }
@@ -275,6 +144,9 @@ class separate_chaining_map {
         return *this;
     }
     void swap(separate_chaining_map& other) {
+        DCHECK_EQ(m_width, other.m_width);
+        ON_DEBUG(std::swap(m_plainkeys, other.m_plainkeys);)
+
         std::swap(m_keys, other.m_keys);
         std::swap(m_values, other.m_values);
         std::swap(m_buckets, other.m_buckets);
@@ -290,18 +162,26 @@ class separate_chaining_map {
         const size_t new_size = 1ULL<<reserve_bits;
 
         if(m_buckets == 0) {
-            m_keys   = new varwidth_key_bucket<key_type>[new_size];
+            ON_DEBUG(m_plainkeys   = reinterpret_cast<key_type**>  (malloc(new_size*sizeof(key_type*)));)
+
+            m_keys   = new bucket_type[new_size];
             m_values = reinterpret_cast<value_type**>(malloc(new_size*sizeof(value_type*)));
             m_bucketsizes  = reinterpret_cast<bucketsize_type*>  (malloc(new_size*sizeof(bucketsize_type)));
             std::fill(m_bucketsizes, m_bucketsizes+new_size, 0);
             m_buckets = reserve_bits;
         } else {
-            separate_chaining_map<key_type, value_type, hash_type> tmp_map;
+            separate_chaining_map tmp_map(m_width);
             tmp_map.reserve(new_size);
             for(size_t bucket = 0; bucket < 1ULL<<m_buckets; ++bucket) {
                 if(m_bucketsizes[bucket] == 0) continue;
+
+                const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
+                const bucket_type& bucket_keys_it = m_keys[bucket];
                 for(size_t i = 0; i < m_bucketsizes[bucket]; ++i) {
-                    tmp_map[m_keys[bucket].read(i, width())] =  m_values[bucket][i];
+                    const key_type read_quotient = bucket_keys_it.read(i, key_bitwidth);
+                    const key_type read_key = m_hash.inv_map(read_quotient, bucket, m_buckets);
+                    DCHECK_EQ(read_key, m_plainkeys[bucket][i]);
+                    tmp_map[read_key] =  m_values[bucket][i];
                 }
             }
             swap(tmp_map);
@@ -314,29 +194,53 @@ class separate_chaining_map {
 
     iterator find(const key_type& key) const {
         if(m_buckets == 0) return end();
-        const size_t bucket = m_hash(key) & ((1ull << m_buckets) - 1ull);
+        auto mapped = m_hash.map(key, m_buckets);
+        const key_type& quotient = mapped.first; 
+        const size_t& bucket = mapped.second;
         const bucketsize_type& bucket_size = m_bucketsizes[bucket];
-        const varwidth_key_bucket<key_type>& bucket_keys = m_keys[bucket];
-        const size_t index = bucket_keys.find(key, bucket_size, width());
-        return (index == -1ULL) ? end() : iterator { *this, bucket, index };
+        DCHECK_EQ(m_hash.inv_map(mapped.first, mapped.second, m_buckets), key);
+        const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
+        DCHECK_LE(most_significant_bit(quotient), key_bitwidth);
+
+        const bucket_type& bucket_keys = m_keys[bucket];
+        for(size_t i = 0; i < bucket_size; ++i) { // needed?
+            const key_type read_quotient = bucket_keys.read(i, key_bitwidth);
+            ON_DEBUG(const key_type read_key = m_hash.inv_map(read_quotient, bucket, m_buckets);)
+            DCHECK_EQ(read_key , m_plainkeys[bucket][i]);
+            if(read_quotient  == quotient) {
+                return iterator { *this, bucket, i };
+            }
+        }
+        return end();
     }
 
     value_type& operator[](const key_type& key) {
         if(m_buckets == 0) reserve(separate_chaining::INITIAL_BUCKETS);
-        const size_t bucket = m_hash(key) & ((1ULL << m_buckets) - 1ULL);
+        auto mapped = m_hash.map(key, m_buckets);
+        const key_type& quotient = mapped.first; 
+        const size_t& bucket = mapped.second;
+        const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
+        DCHECK_LE(most_significant_bit(quotient), key_bitwidth);
+
+        DCHECK_EQ(m_hash.inv_map(mapped.first, mapped.second, m_buckets), key);
+
         bucketsize_type& bucket_size = m_bucketsizes[bucket];
-        varwidth_key_bucket<key_type>& bucket_keys = m_keys[bucket];
+        bucket_type& bucket_keys = m_keys[bucket];
+        ON_DEBUG(key_type*& bucket_plainkeys = m_plainkeys[bucket];)
+
         value_type*& bucket_values = m_values[bucket];
-
-        {
-            const size_t index = bucket_keys.find(key, bucket_size, width());
-            if(index != -1ULL) { return bucket_values[index]; }
-        }
-
-        if(bucket_size == MAX_BUCKETSIZE) {
-            if(m_elements*10 < max_bucket_count() * bucket_count()) {
-                throw std::runtime_error("The chosen hash function is bad!");
+        for(size_t i = 0; i < bucket_size; ++i) { 
+            const key_type read_quotient = bucket_keys.read(i, key_bitwidth);
+            ON_DEBUG(const key_type read_key = m_hash.inv_map(read_quotient, bucket, m_buckets);)
+            DCHECK_EQ(read_key , m_plainkeys[bucket][i]);
+            if(read_quotient  == quotient) {
+                return bucket_values[i];
             }
+        }
+        if(bucket_size == MAX_BUCKETSIZE) {
+			if(m_elements*separate_chaining::FAIL_PERCENTAGE < max_bucket_count() * bucket_count()) {
+				throw std::runtime_error("The chosen hash function is bad!");
+			}
             reserve(1ULL<<(m_buckets+1));
             return operator[](key);
         }
@@ -344,14 +248,23 @@ class separate_chaining_map {
 
         if(bucket_size == 0) {
             bucket_size = 1;
+            ON_DEBUG(bucket_plainkeys   = reinterpret_cast<key_type*>  (malloc(sizeof(key_type))));
             bucket_keys.initiate();
             bucket_values = reinterpret_cast<value_type*>(malloc(sizeof(value_type)));
         } else {
             ++bucket_size;
-            bucket_keys.increment_size(bucket_size, width());
+            ON_DEBUG(bucket_plainkeys   = reinterpret_cast<key_type*>  (realloc(bucket_plainkeys, sizeof(key_type)*bucket_size));)
+            bucket_keys.increment_size(bucket_size, key_bitwidth);
             bucket_values = reinterpret_cast<value_type*>(realloc(bucket_values, sizeof(value_type)*bucket_size));
         }
-        bucket_keys.write(bucket_size-1, key, width());
+        DCHECK_LE(key, max_key());
+        ON_DEBUG(bucket_plainkeys[bucket_size-1] = key;)
+        
+        DCHECK_LT((static_cast<size_t>(bucket_size-1)*key_bitwidth)/64 + ((bucket_size-1)* key_bitwidth) % 64, 64*ceil_div<bucketsize_type>(bucket_size*key_bitwidth, 64) );
+
+        bucket_keys.write(bucket_size-1, quotient, key_bitwidth);
+        DCHECK_EQ(m_hash.inv_map(bucket_keys.read(bucket_size-1, key_bitwidth), bucket, m_buckets), key);
+
         return bucket_values[bucket_size-1];
     }
 

@@ -2,23 +2,12 @@
 #include <gtest/gtest.h>
 #include <map>
 #include "separate_chaining_map.hpp"
-#include "separate_chaining_map_int.hpp"
-#include "compact_separate_chaining.hpp"
 #include "keysplit_adapter.hpp"
 #include <algorithm>
 #include "bijective_hash.hpp"
 
 using bijective_hash = poplar::bijective_hash::Xorshift;
 
-class SplitMix { // from http://zimbry.blogspot.com/2011/09/better-bit-mixing-improving-on.html
-   public:
-   uint64_t operator()(uint64_t x) const {
-      x = (x ^ (x >> 30)) * UINT64_C(0xbf58476d1ce4e5b9);
-      x = (x ^ (x >> 27)) * UINT64_C(0x94d049bb133111eb);
-      x = x ^ (x >> 31);
-      return x;
-   }
-};
 
 
 template<class T>
@@ -81,25 +70,21 @@ void test_random(T& map) {
    TEST(x, random) { y; test_random(map); }
 
 #define COMMA ,
-TEST_MAP(separate_chaining_map, separate_chaining_map<uint16_t COMMA uint16_t> map)
-TEST_MAP(keysplit_adapter, keysplit_adapter<separate_chaining_map<uint64_t COMMA uint16_t COMMA SplitMix>> map)
-TEST_MAP(separate_chaining_map_int, separate_chaining_map<uint64_t COMMA uint16_t> map(27))
-TEST_MAP(compact_separate_chaining_map, compact_separate_chaining_map<uint16_t COMMA bijective_hash> map(27))
+TEST_MAP(map_plain_16,  separate_chaining_map<plain_key_bucket<uint32_t> COMMA uint16_t COMMA hash_mapping_adapter<uint32_t COMMA SplitMix>> map)
+TEST_MAP(map_plain_32,  separate_chaining_map<plain_key_bucket<uint32_t> COMMA uint32_t COMMA hash_mapping_adapter<uint32_t COMMA SplitMix>> map)
+TEST_MAP(map_plain_Xor, separate_chaining_map<plain_key_bucket<uint32_t> COMMA uint32_t COMMA xorshift_hash> map(32))
+
+TEST_MAP(map_var_16,  separate_chaining_map<varwidth_key_bucket COMMA uint16_t COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> map)
+TEST_MAP(map_var_32,  separate_chaining_map<varwidth_key_bucket COMMA uint32_t COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> map)
+TEST_MAP(map_var_Xor, separate_chaining_map<varwidth_key_bucket COMMA uint32_t COMMA xorshift_hash> map(32))
+
+
+TEST_MAP(keysplit_adapter, keysplit_adapter<separate_chaining_map<varwidth_key_bucket COMMA uint16_t COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>>> map)
+// TEST_MAP(separate_chaining_map_int, separate_chaining_map<uint64_t COMMA uint16_t> map(27))
+// TEST_MAP(compact_separate_chaining_map, compact_separate_chaining_map<uint16_t COMMA bijective_hash> map(27))
 
 
 int main(int argc, char **argv) {
-
-   {
-   compact_separate_chaining_map<uint64_t,bijective_hash> map(27);
-   for(size_t i = 0; i < std::numeric_limits<uint16_t>::max(); ++i) {
-      map[i] = i;
-   }
-   for(size_t i = 0; i < std::numeric_limits<uint16_t>::max(); ++i) {
-      DCHECK_EQ(map[i], i);
-      DCHECK_EQ(map[i], map[i]);
-   }
-   }
-
 
    ::testing::InitGoogleTest(&argc, argv);
    return RUN_ALL_TESTS();
