@@ -4,6 +4,79 @@
 #include "dcheck.hpp"
 #include <tudocomp/util/sdsl_bits.hpp>
 
+// avx_key_bucket
+//TODO: avx2 __m256i _mm256_broadcastw_epi16 (__m128i a) and __m256i _mm256_cmpeq_epi8 (__m256i a, __m256i b)
+
+template<class key_t, class allocator_t>
+class class_key_bucket {
+    public:
+    using key_type = key_t;
+    using allocator_type = allocator_t;
+
+    private:
+    allocator_type allocator;
+    key_type* m_keys = nullptr; //!bucket for keys
+    ON_DEBUG(size_t m_length;)
+
+    public:
+
+    void clear() {
+        if(m_keys != nullptr) {
+            allocator.deallocate(m_keys);
+        }
+        m_keys = nullptr;
+    }
+
+    class_key_bucket() = default;
+
+    void initiate() {
+        m_keys = allocator.template allocate<key_type>(1);
+        ON_DEBUG(m_length = 1;)
+    }
+
+    void increment_size(const size_t size, [[maybe_unused]] const size_t width) {
+        key_type* keys = allocator.template allocate<key_type>(size);
+        for(size_t i = 0; i < size-1; ++i) {
+            keys[i] = std::move(m_keys[i]);
+        }
+        allocator.deallocate(m_keys);
+        m_keys = keys;
+        ON_DEBUG(m_length = size;)
+    }
+
+    void write(const size_t i, const key_type& key, [[maybe_unused]] const uint_fast8_t width) {
+        DCHECK_LT(i, m_length);
+        m_keys[i] = key;
+    }
+    key_type read(size_t i, [[maybe_unused]]  size_t width) const {
+        DCHECK_LT(i, m_length);
+        return m_keys[i];
+    }
+    size_t find(const key_type& key, const size_t length, [[maybe_unused]] const size_t width) const {
+       for(size_t i = 0; i < length; ++i) {
+          if(m_keys[i] == key) return i;
+       }
+       return -1ULL;
+    }
+
+    ~class_key_bucket() { clear(); }
+
+    class_key_bucket(class_key_bucket&& other) 
+        : m_keys(std::move(other.m_keys))
+    {
+        other.m_keys = nullptr;
+    }
+
+    class_key_bucket& operator=(class_key_bucket&& other) {
+        clear();
+        m_keys = std::move(other.m_keys);
+        other.m_keys = nullptr;
+        return *this;
+    }
+
+};
+
+
 template<class key_t>
 class plain_key_bucket {
     public:
@@ -13,6 +86,7 @@ class plain_key_bucket {
     key_type* m_keys = nullptr; //!bucket for keys
     ON_DEBUG(size_t m_length;)
 
+    public:
     void clear() {
         if(m_keys != nullptr) {
             free(m_keys);
@@ -20,7 +94,6 @@ class plain_key_bucket {
         m_keys = nullptr;
     }
 
-    public:
     plain_key_bucket() = default;
 
     void initiate() {
@@ -72,6 +145,7 @@ class varwidth_key_bucket {
     key_type* m_keys = nullptr; //!bucket for keys
     ON_DEBUG(size_t m_length;)
 
+    public:
     void clear() {
         if(m_keys != nullptr) {
             free(m_keys);
@@ -79,7 +153,6 @@ class varwidth_key_bucket {
         m_keys = nullptr;
     }
 
-    public:
     varwidth_key_bucket() = default;
 
     void initiate() {

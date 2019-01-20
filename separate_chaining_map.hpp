@@ -6,6 +6,9 @@
 #include "dcheck.hpp"
 #include "hash.hpp"
 #include "bucket.hpp"
+#if STATS_ENABLED
+#include <tudocomp_stat/StatPhase.hpp>
+#endif
 
 namespace separate_chaining {
     static constexpr size_t MAX_BUCKET_BYTESIZE = 128;
@@ -62,11 +65,6 @@ class separate_chaining_map {
     using class_type = separate_chaining_map<bucket_type, value_type, hash_mapping_type>;
     using iterator = separate_chaining_iterator<class_type>;
 
-    size_t max_bucketsize() const { //! largest number of elements a bucket can contain before enlarging the hash table
-        const size_t ret = separate_chaining::MAX_BUCKET_BYTESIZE/m_width;
-        DCHECK_LT(ret, std::numeric_limits<bucketsize_type>::max());
-        return ret;
-    }
 
     // static constexpr size_t MAX_BUCKETSIZE = separate_chaining::MAX_BUCKET_BYTESIZE/sizeof(key_type); //TODO: make constexpr
     // static_assert(MAX_BUCKETSIZE < std::numeric_limits<bucketsize_type>::max(), "enlarge separate_chaining::MAX_BUCKET_BYTESIZE for this key type!");
@@ -82,18 +80,30 @@ class separate_chaining_map {
     const uint_fast8_t m_width;
     hash_mapping_type m_hash; //! hash function
 
-    void clear() { //! empties hash table
-        if(m_buckets > 0) {
-            for(size_t bucket = 0; bucket < (1ULL<<m_buckets); ++bucket) {
-                if(m_bucketsizes[bucket] == 0) continue;
-                free(m_values[bucket]);
-            }
-            delete [] m_keys;
-            free(m_values);
-            free(m_bucketsizes);
-        }
+    void clear(const size_t bucket) { //! empties i-th bucket
+        free(m_values[bucket]);
+        m_keys[bucket].clear();
+        ON_DEBUG(free(m_plainkeys[bucket]));
+        m_bucketsizes[bucket] = 0;
+    }
+    void clear_structure() {
+        delete [] m_keys;
+        ON_DEBUG(free(m_plainkeys));
+        free(m_values);
+        free(m_bucketsizes);
+        m_bucketsizes = nullptr;
         m_buckets = 0;
         m_elements = 0;
+    }
+
+    void clear() { //! empties hash table
+        if(m_bucketsizes != nullptr) {
+            for(size_t bucket = 0; bucket < (1ULL<<m_buckets); ++bucket) {
+                if(m_bucketsizes[bucket] == 0) continue;
+                clear(bucket);
+            }
+            clear_structure();
+        }
     }
 
     public:
@@ -110,9 +120,12 @@ class separate_chaining_map {
         return m_elements;
     }
 
-    //! @see std::unordered_map
-    bucketsize_type max_bucket_count() const {
-        const size_t ret = separate_chaining::MAX_BUCKET_BYTESIZE*16/m_width;
+    size_type max_size() const noexcept {
+        return max_bucket_size() * bucket_count();
+    }
+
+    size_t max_bucket_size() const { //! largest number of elements a bucket can contain before enlarging the hash table
+        const size_t ret = (separate_chaining::MAX_BUCKET_BYTESIZE*8)/m_width;
         DCHECK_LT(ret, std::numeric_limits<bucketsize_type>::max());
         return ret;
     }
@@ -127,7 +140,10 @@ class separate_chaining_map {
         return m_bucketsizes[n];
     }
 
-    separate_chaining_map(size_t width = sizeof(key_type)/8) : m_width(width), m_hash(m_width) {
+    separate_chaining_map(size_t width = sizeof(key_type)*8) 
+        : m_width(width)
+        , m_hash(m_width) 
+    {
         DCHECK_LE(width, sizeof(key_type)*8);
     }
 
@@ -139,17 +155,21 @@ class separate_chaining_map {
        , m_elements(std::move(other.m_elements))
        , m_hash(std::move(other.m_hash))
     {
-        other.m_buckets = 0; //! a hash map without buckets is already deleted
+
+        ON_DEBUG(m_plainkeys = std::move(other.m_plainkeys));
+        other.m_bucketsizes = nullptr; //! a hash map without buckets is already deleted
     }
 
     separate_chaining_map& operator=(separate_chaining_map&& other) {
+        clear();
         m_keys        = std::move(other.m_keys);
         m_values      = std::move(other.m_values);
         m_buckets     = std::move(other.m_buckets);
         m_bucketsizes = std::move(other.m_bucketsizes);
         m_hash        = std::move(other.m_hash);
         m_elements    = std::move(other.m_elements);
-        other.m_buckets = 0; //! a hash map without buckets is already deleted
+        ON_DEBUG(m_plainkeys = std::move(other.m_plainkeys));
+        other.m_bucketsizes = nullptr; //! a hash map without buckets is already deleted
         return *this;
     }
     void swap(separate_chaining_map& other) {
@@ -163,6 +183,22 @@ class separate_chaining_map {
         std::swap(m_hash, other.m_hash);
         std::swap(m_elements, other.m_elements);
     }
+
+#if STATS_ENABLED
+    void print_stats(tdc::StatPhase& statphase) {
+            statphase.log("class", typeid(class_type).name());
+            statphase.log("size", size());
+            statphase.log("bucket_count", bucket_count());
+            double deviation = 0;
+            for(size_t i = 0; i < bucket_count(); ++i) {
+                const double diff = (static_cast<double>(size()/bucket_count()) - bucket_size(i));
+                deviation += diff*diff;
+            }
+            statphase.log("deviation", deviation);
+            statphase.log("width", m_width);
+            statphase.log("max_bucket_size", max_bucket_size());
+    }
+#endif
 
 
     void reserve(size_t reserve) {
@@ -181,6 +217,10 @@ class separate_chaining_map {
         } else {
             separate_chaining_map tmp_map(m_width);
             tmp_map.reserve(new_size);
+#if STATS_ENABLED
+            tdc::StatPhase statphase(std::string("resizing to ") + std::to_string(reserve_bits));
+            print_stats(statphase);
+#endif
             for(size_t bucket = 0; bucket < 1ULL<<m_buckets; ++bucket) {
                 if(m_bucketsizes[bucket] == 0) continue;
 
@@ -192,7 +232,10 @@ class separate_chaining_map {
                     DCHECK_EQ(read_key, m_plainkeys[bucket][i]);
                     tmp_map[read_key] =  m_values[bucket][i];
                 }
+                clear(bucket);
+                //TODO: add free to save memory
             }
+            clear_structure();
             swap(tmp_map);
         }
     }
@@ -246,10 +289,10 @@ class separate_chaining_map {
                 return bucket_values[i];
             }
         }
-        if(bucket_size == max_bucket_count()) {
-			if(m_elements*separate_chaining::FAIL_PERCENTAGE < max_bucket_count() * bucket_count()) {
-				throw std::runtime_error("The chosen hash function is bad!");
-			}
+        if(bucket_size == max_bucket_size()) {
+            if(m_elements*separate_chaining::FAIL_PERCENTAGE < max_size()) {
+                throw std::runtime_error("The chosen hash function is bad!");
+            }
             reserve(1ULL<<(m_buckets+1));
             return operator[](key);
         }

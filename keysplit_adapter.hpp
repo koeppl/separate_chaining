@@ -1,12 +1,17 @@
 #pragma once
 
+#include <cstdint>
 #include <numeric>
 #include <limits>
+#include <algorithm>
 
+/** can be used for keys in [0 .. max-1], where max = std::numeric_limits<uint64_t>::max()
+ */
 template<class map_type>
 class keysplit_adapter {
-   static std::size_t constexpr m_length = 8;
+   static std::size_t constexpr m_length = 16;
    map_type* m_maps[m_length];
+   static std::size_t constexpr m_interval = sizeof(uint64_t) * 8 / m_length;
 
    public:
    using value_type = typename map_type::value_type;
@@ -24,7 +29,7 @@ class keysplit_adapter {
 
    keysplit_adapter() {
       for(std::size_t i = 0; i < m_length; ++i) {
-         m_maps[i] = new map_type((i+1)*8);
+         m_maps[i] = new map_type(std::min<size_t>((i+1)*m_interval,64));
       }
    }
    ~keysplit_adapter() {
@@ -52,11 +57,11 @@ class keysplit_adapter {
     }
 
     iterator find(const key_type& key) const {
-       return m_maps[most_significant_bit(key)/8]->find(key);
+       return m_maps[most_significant_bit(key)/m_interval]->find(key);
     }
 
     value_type& operator[](const key_type& key) {
-       return (*m_maps[most_significant_bit(key)/8])[key];
+       return (*m_maps[most_significant_bit(key+1)/m_interval])[key];
     }
 };
 

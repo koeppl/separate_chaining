@@ -14,7 +14,37 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -mtune=native")
 
 add_subdirectory(external/bit_span)
 include_directories(external/bit_span/include)
+include_directories(external/tudostats/include)
 
+
+add_subdirectory(external/tudostats)
+
+##########
+# BENCHMARKS
+##########
+
+set(NO_CELERO 0)
+find_path(CELERO_INCLUDE_DIR celero/Celero.h)
+find_library(CELERO_LIB libcelero.so)
+if(CELERO_INCLUDE_DIR STREQUAL "CELERO_INCLUDE_DIR-NOTFOUND" OR CELERO_LIB_DIR STREQUAL "CELERO_LIB-NOTFOUND")
+	set(NO_CELERO 1)
+	add_definitions(-DNO_CELERO=1)
+else()
+	include_directories(${CELERO_INCLUDE_DIR})
+endif()
+
+if(NO_CELERO EQUAL 0)
+	add_executable(bench_table bench_table.cpp)
+	target_link_libraries(bench_table ${CELERO_LIB})
+endif()
+
+##########
+# stats
+##########
+
+add_executable  (stats_hashtable stats_hashtable.cpp)
+
+target_link_libraries(stats_hashtable tudocomp_stat)
  
 ##########
 # library
@@ -45,6 +75,7 @@ enable_testing()
 add_test(NAME map COMMAND test_map)
 
 
+MESSAGE( STATUS "With Celero?: " ${CELERO_INCLUDE_DIR} ${CELERO_LIB_DIR} )
 MESSAGE( STATUS "With Gtest?: " ${GTEST_INCLUDE_DIR} )
 MESSAGE( STATUS "Built Type: " ${CMAKE_BUILD_TYPE} )
 MESSAGE( STATUS "CXX Flags: " ${CMAKE_CXX_FLAGS} )
