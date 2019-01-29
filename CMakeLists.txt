@@ -14,6 +14,7 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -mtune=native")
 
 add_subdirectory(external/bit_span)
 include_directories(external/bit_span/include)
+include_directories(external/compact_sparse_hash/include)
 include_directories(external/tudostats/include)
 
 
@@ -35,7 +36,8 @@ endif()
 
 if(NO_CELERO EQUAL 0)
 	add_executable(bench_table bench_table.cpp)
-	target_link_libraries(bench_table ${CELERO_LIB})
+	target_link_libraries(bench_table ${CELERO_LIB} glog)
+	#target_link_libraries(bench_table ${CELERO_LIB})
 endif()
 
 ##########
@@ -44,7 +46,8 @@ endif()
 
 add_executable  (stats_hashtable stats_hashtable.cpp)
 
-target_link_libraries(stats_hashtable tudocomp_stat)
+#target_link_libraries(stats_hashtable tudocomp_stat)
+target_link_libraries(stats_hashtable tudocomp_stat glog)
  
 ##########
 # library

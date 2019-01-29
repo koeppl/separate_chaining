@@ -6,12 +6,18 @@
 #include <algorithm>
 
 /** can be used for keys in [0 .. max-1], where max = std::numeric_limits<uint64_t>::max()
+ * max_bits: maximum number of bits a key can have
+ * m_length: number of hash tables to use
  */
-template<class map_type>
+template<class map_type, size_t max_bits = 8*sizeof(typename map_type::key_type), size_t m_length = 8>
 class keysplit_adapter {
-   static std::size_t constexpr m_length = 16;
+
+   public:
+   static std::size_t constexpr m_interval = ceil_div(max_bits, m_length); //! number of bit lengths assigned to one hash table
+   static_assert(max_bits > 0 && m_length > 0, "m_length and max_bits must be positive");
+
+   private:
    map_type* m_maps[m_length];
-   static std::size_t constexpr m_interval = sizeof(uint64_t) * 8 / m_length;
 
    public:
    using value_type = typename map_type::value_type;
@@ -29,7 +35,7 @@ class keysplit_adapter {
 
    keysplit_adapter() {
       for(std::size_t i = 0; i < m_length; ++i) {
-         m_maps[i] = new map_type(std::min<size_t>((i+1)*m_interval,64));
+         m_maps[i] = new map_type(std::min<size_t>((i+1)*m_interval,max_bits));
       }
    }
    ~keysplit_adapter() {
@@ -57,11 +63,96 @@ class keysplit_adapter {
     }
 
     iterator find(const key_type& key) const {
-       return m_maps[most_significant_bit(key)/m_interval]->find(key);
+       const uint_fast8_t key_bit_width = bit_width(key);
+       const uint_fast8_t slot = key_bit_width == 0 ? 0 : (key_bit_width-1)/m_interval;
+       DCHECK_LT(slot, m_length);
+       return m_maps[slot]->find(key);
     }
 
     value_type& operator[](const key_type& key) {
-       return (*m_maps[most_significant_bit(key+1)/m_interval])[key];
+       const uint_fast8_t key_bit_width = bit_width(key);
+       const uint_fast8_t slot = key_bit_width == 0 ? 0 : (key_bit_width-1)/m_interval;
+       DCHECK_LT(slot, m_length);
+       return (*m_maps[slot])[key];
+    }
+};
+
+
+/**
+ * using compact hashing with key ranging to 64-bits do not work when using the xorshift hash function.
+ * Instead, we use a different hash table `large_map_type` for storing 64-bit integers.
+ */
+template<class map_type, class large_map_type, size_t m_length = 8>
+class keysplit_adapter64 {
+   public:
+   using value_type = typename large_map_type::value_type;
+   using key_type = typename large_map_type::key_type;
+
+   private:
+   static constexpr size_t max_bits = sizeof(key_type) * 8;
+   keysplit_adapter<map_type, max_bits-1> m_adapter;
+
+   large_map_type m_large_map;
+   static std::size_t constexpr m_interval = max_bits / m_length;
+   static_assert(max_bits > m_length, "m_length is smaller than max_bits");
+
+
+   public:
+
+   class dummy_iterator {
+        using pair_type = std::pair<bool, value_type>;
+        pair_type m_pair;
+      public:
+        dummy_iterator(pair_type&& other) : m_pair(std::move(other)) {}
+
+        const pair_type* operator->() const {
+            return &m_pair;
+        }
+   };
+
+
+   using iterator = dummy_iterator;
+
+    //! returns the maximum value of a key that can be stored
+   constexpr key_type max_key() const { return std::numeric_limits<key_type>::max(); }
+
+   void clear() {
+      m_adapter.clear();
+      m_large_map.clear();
+   }
+
+   keysplit_adapter64() : m_large_map(max_bits) {
+   }
+   ~keysplit_adapter64() {
+   }
+
+    //! @see std::unordered_map
+    bool empty() const { 
+      return m_adapter.empty() && m_large_map.empty();
+    } 
+
+    //! @see std::unordered_map
+    std::size_t size() const {
+       return m_large_map.size() + m_adapter.size();
+    }
+
+    const iterator end() const {
+        return iterator { std::make_pair(false, 0) };
+    }
+
+    iterator find(const key_type& key) const {
+       if(bit_width(key) < max_bits-m_adapter.m_interval) {
+          auto it = m_adapter.find(key);
+          return dummy_iterator {std::make_pair(it->first, it->second) };
+       }
+       else {
+          auto it = m_large_map.find(key);
+          return dummy_iterator {std::make_pair(it->first, it->second)};
+       }
+    }
+
+    value_type& operator[](const key_type& key) {
+       return (bit_width(key) < max_bits-m_adapter.m_interval) ? m_adapter[key] : m_large_map[key];
     }
 };
 

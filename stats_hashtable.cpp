@@ -12,6 +12,12 @@
 
 #include "separate_chaining_map.hpp"
 #include "keysplit_adapter.hpp"
+#include <tudocomp/util/compact_hash.hpp>
+#include <tudocomp/util/compact_displacement_hash.hpp>
+#include <tudocomp/util/compact_sparse_displacement_hash.hpp>
+#include <tudocomp/util/compact_sparse_hash.hpp>
+
+#include "/home/niki/code/prefixsearch/program/TPackedTrie/rigtorp/HashMap.h"
 
 template<class T>
 T random_int(const T& maxvalue) {
@@ -39,6 +45,18 @@ void copy(const T& orig, U& copied) {
    }
 }
 
+// template<typename val_t> using elias_type = tdc::compact_sparse_hashmap::compact_elias_displacement_hashmap_t<val_t>;
+// template<typename val_t> using elias_type = tdc::compact_sparse_hashmap::compact_elias_displacement_hashmap_t<val_t>;
+//
+// using namespace tdc::compact_sparse_hashmap;
+//
+// using compact_sparse_displacement_hashmap_t = generic_hashmap_t<poplar_xorshift_t, 
+//       buckets_bv_t<val_t>, displacement_t<compact_displacement_table_t<4>> >;
+//
+//
+// using compact_hashmap_t = generic_hashmap_t<hash_t, plain_sentinel_t<val_t>, cv_bvs_t >;
+//
+// tdc::compact_sparse_hashmap::generic_hashmap_t<poplar_xorshift_t, 
 
 int main() {
   free(malloc(42));
@@ -64,6 +82,24 @@ int main() {
         delete [] keys;
         delete [] values;
     }
+    {
+        tdc::StatPhase v("tudo elias");
+        tdc::compact_sparse_hashmap::compact_sparse_elias_displacement_hashmap_t<value_type> map(0,NUM_RANGE);
+
+        copy(rev,map);
+    }
+    {
+        tdc::StatPhase v("tudo cleary");
+        tdc::compact_sparse_hashmap::compact_sparse_hashmap_t<value_type> map(0,NUM_RANGE);
+
+        copy(rev,map);
+    }
+    {
+        tdc::StatPhase v("tudo layered");
+        tdc::compact_sparse_hashmap::compact_sparse_displacement_hashmap_t<value_type> map(0,NUM_RANGE);
+        copy(rev,map);
+    }
+
     {
         tdc::StatPhase v("compact");
         separate_chaining_map<varwidth_key_bucket, value_type, xorshift_hash> map(NUM_RANGE);
@@ -99,6 +135,12 @@ int main() {
         for(auto el : rev) {
            map.push_back(el);
         }
+    }
+    {
+        tdc::StatPhase v("rigtorp");
+        rigtorp::HashMap<key_type, value_type, SplitMix> map;
+        // std::unordered_map<key_type,value_type> map;
+        copy(rev,map);
     }
     {
         tdc::StatPhase v("unordered_map");

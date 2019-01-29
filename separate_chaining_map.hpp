@@ -11,7 +11,8 @@
 #endif
 
 namespace separate_chaining {
-    static constexpr size_t MAX_BUCKET_BYTESIZE = 128;
+    //static constexpr size_t MAX_BUCKET_BYTESIZE = 128;
+    static constexpr size_t MAX_BUCKET_BYTESIZE = 256;
     static constexpr size_t INITIAL_BUCKETS = 16;
     static constexpr size_t FAIL_PERCENTAGE = 20;
 }

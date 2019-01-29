@@ -17,22 +17,6 @@ T random_int(const T& maxvalue) {
 
 
 
-TEST(separate_chaining_map, step) {
-   constexpr size_t NUM_ELEMENTS = 1000000;
-   constexpr size_t NUM_RANGE = 32;
-
-   std::unordered_map<uint64_t,uint64_t> rev;
-   separate_chaining_map<plain_key_bucket<uint32_t>, uint64_t, hash_mapping_adapter<uint32_t, SplitMix>> map(NUM_RANGE);
-   for(size_t i = 0; i < NUM_ELEMENTS; ++i) {
-      size_t key= random_int(1ULL<<NUM_RANGE);
-      map[key] = rev[key] = i;
-      ASSERT_EQ(map.size(), rev.size());
-   }
-   for(auto el : rev) {
-      ASSERT_EQ( map.find(el.first)->second, el.second);
-   }
-
-}
 
 
 template<class T>
@@ -123,6 +107,11 @@ void test_random_large(T& map) {
 
 
 #define COMMA ,
+
+TEST_MAP(keysplit_adapter64, keysplit_adapter64<separate_chaining_map<varwidth_key_bucket COMMA uint16_t COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> COMMA separate_chaining_map<plain_key_bucket<uint64_t> COMMA uint16_t COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> > map)
+
+TEST_MAP(keysplit_adapter, keysplit_adapter<separate_chaining_map<varwidth_key_bucket COMMA uint16_t COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>>> map)
+
 TEST_MAP(map_plain_16,  separate_chaining_map<plain_key_bucket<uint32_t> COMMA uint16_t COMMA hash_mapping_adapter<uint32_t COMMA SplitMix>> map)
 TEST_MAP(map_plain_32,  separate_chaining_map<plain_key_bucket<uint32_t> COMMA uint32_t COMMA hash_mapping_adapter<uint32_t COMMA SplitMix>> map)
 TEST_MAP(map_plain_Xor, separate_chaining_map<plain_key_bucket<uint32_t> COMMA uint32_t COMMA xorshift_hash> map(32))
@@ -132,10 +121,26 @@ TEST_MAP(map_var_32,  separate_chaining_map<varwidth_key_bucket COMMA uint32_t C
 TEST_MAP(map_var_Xor, separate_chaining_map<varwidth_key_bucket COMMA uint32_t COMMA xorshift_hash> map(32))
 
 
-TEST_MAP(keysplit_adapter, keysplit_adapter<separate_chaining_map<varwidth_key_bucket COMMA uint16_t COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>>> map)
+
 // TEST_MAP(separate_chaining_map_int, separate_chaining_map<uint64_t COMMA uint16_t> map(27))
 // TEST_MAP(compact_separate_chaining_map, compact_separate_chaining_map<uint16_t COMMA bijective_hash> map(27))
 
+TEST(separate_chaining_map, step) {
+   constexpr size_t NUM_ELEMENTS = 1000000;
+   constexpr size_t NUM_RANGE = 32;
+
+   std::unordered_map<uint64_t,uint64_t> rev;
+   separate_chaining_map<plain_key_bucket<uint32_t>, uint64_t, hash_mapping_adapter<uint32_t, SplitMix>> map(NUM_RANGE);
+   for(size_t i = 0; i < NUM_ELEMENTS; ++i) {
+      size_t key= random_int(1ULL<<NUM_RANGE);
+      map[key] = rev[key] = i;
+      ASSERT_EQ(map.size(), rev.size());
+   }
+   for(auto el : rev) {
+      ASSERT_EQ( map.find(el.first)->second, el.second);
+   }
+
+}
 
 int main(int argc, char **argv) {
 
