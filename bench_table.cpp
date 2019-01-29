@@ -28,6 +28,7 @@ class Fixture {
    using map_type = std::map<key_type, value_type>;
    using unordered_type = std::unordered_map<key_type, value_type, SplitMix>;
    using plain_type = separate_chaining_map<plain_key_bucket<key_type>, value_type, hash_mapping_adapter<key_type, SplitMix>>;
+   using avx2_type = separate_chaining_map<avx2_key_bucket, value_type, hash_mapping_adapter<uint64_t, SplitMix>>;
    using compact_type = separate_chaining_map<varwidth_key_bucket, value_type, xorshift_hash>;
    using elias_type = tdc::compact_sparse_hashmap::compact_sparse_elias_displacement_hashmap_t<value_type>;
    using cleary_type = tdc::compact_sparse_hashmap::compact_sparse_hashmap_t<value_type>;
@@ -36,6 +37,7 @@ class Fixture {
    map_type* m_map = nullptr;
    unordered_type* m_ordered = nullptr;
    plain_type* m_plain = nullptr;
+   avx2_type* m_avx = nullptr;
    compact_type* m_compact = nullptr;
    layered_type* m_layered = nullptr;
    elias_type* m_elias = nullptr;
@@ -52,6 +54,7 @@ class Fixture {
       m_map = new map_type();
       m_ordered = new unordered_type();
       m_plain = new plain_type();
+      m_avx = new avx2_type();
       m_compact = new compact_type(NUM_RANGE);
 
       m_elias = new elias_type(NUM_RANGE);
@@ -63,6 +66,7 @@ class Fixture {
       for(auto el : *m_map) {
 	 (*m_ordered)[el.first] = el.second;
 	 (*m_plain)[el.first] = el.second;
+	 (*m_avx)[el.first] = el.second;
 	 (*m_compact)[el.first] = el.second;
 	 (*m_cleary)[el.first] = el.second;
 	 (*m_layered)[el.first] = el.second;
@@ -70,6 +74,7 @@ class Fixture {
 
 	 DCHECK_EQ((*m_ordered)[el.first], el.second);
 	 DCHECK_EQ((*m_plain)[el.first], el.second);
+	 DCHECK_EQ((*m_avx)[el.first], el.second);
 	 DCHECK_EQ((*m_compact)[el.first], el.second);
 	 DCHECK_EQ((*m_cleary)[el.first], el.second);
 	 DCHECK_EQ((*m_elias)[el.first], el.second);
@@ -77,6 +82,7 @@ class Fixture {
       }
       DCHECK_EQ(m_ordered->size(), m_map->size());
       DCHECK_EQ(m_plain->size(), m_ordered->size());
+      DCHECK_EQ(m_avx->size(), m_ordered->size());
       DCHECK_EQ(m_compact->size(), m_ordered->size());
       DCHECK_EQ(m_cleary->size(), m_ordered->size());
       DCHECK_EQ(m_elias->size(), m_ordered->size());
@@ -87,6 +93,7 @@ class Fixture {
 	 delete m_map;
 	 delete m_ordered;
 	 delete m_plain;
+	 delete m_avx;
 	 delete m_compact;
 	 delete m_elias;
 	 delete m_layered;
@@ -164,6 +171,14 @@ BENCHMARK_F(query, plain_32, TableFixture, 0, 100)
    const auto& plain = *(static_fixture.m_plain);
    for(auto el : *static_fixture.m_map) {
       celero::DoNotOptimizeAway(plain.find(el.first));
+   }
+}
+
+BENCHMARK_F(query, avx2_32, TableFixture, 0, 100)
+{
+   const auto& avx = *(static_fixture.m_avx);
+   for(auto el : *static_fixture.m_map) {
+      celero::DoNotOptimizeAway(avx.find(el.first));
    }
 }
 

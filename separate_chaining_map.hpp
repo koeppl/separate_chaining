@@ -256,14 +256,30 @@ class separate_chaining_map {
         DCHECK_LE(most_significant_bit(quotient), key_bitwidth);
 
         const bucket_type& bucket_keys = m_keys[bucket];
-        for(size_t i = 0; i < bucket_size; ++i) { // needed?
-            const key_type read_quotient = bucket_keys.read(i, key_bitwidth);
-            ON_DEBUG(const key_type read_key = m_hash.inv_map(read_quotient, bucket, m_buckets);)
-            DCHECK_EQ(read_key , m_plainkeys[bucket][i]);
-            if(read_quotient  == quotient) {
-                return iterator { *this, bucket, i };
+
+
+        ON_DEBUG(
+            size_t plain_position = -1ULL;
+            for(size_t i = 0; i < bucket_size; ++i) { // needed?
+                const key_type read_quotient = bucket_keys.read(i, key_bitwidth);
+                ON_DEBUG(const key_type read_key = m_hash.inv_map(read_quotient, bucket, m_buckets);)
+                DCHECK_EQ(read_key , m_plainkeys[bucket][i]);
+                if(read_quotient  == quotient) {
+                    plain_position = i;
+                    break;
+                }
+            }
+        )
+
+        {
+            const size_t position = bucket_keys.find(key, bucket_size, key_bitwidth);
+            DCHECK_EQ(position, plain_position);
+            if(position != -1ULL) {
+                DCHECK_LT(position, bucket_size);
+                return iterator { *this, bucket, position };
             }
         }
+
         return end();
     }
 
@@ -279,17 +295,30 @@ class separate_chaining_map {
 
         bucketsize_type& bucket_size = m_bucketsizes[bucket];
         bucket_type& bucket_keys = m_keys[bucket];
-        ON_DEBUG(key_type*& bucket_plainkeys = m_plainkeys[bucket];)
-
         value_type*& bucket_values = m_values[bucket];
-        for(size_t i = 0; i < bucket_size; ++i) { 
-            const key_type read_quotient = bucket_keys.read(i, key_bitwidth);
-            ON_DEBUG(const key_type read_key = m_hash.inv_map(read_quotient, bucket, m_buckets);)
-            DCHECK_EQ(read_key , m_plainkeys[bucket][i]);
-            if(read_quotient  == quotient) {
-                return bucket_values[i];
+
+        ON_DEBUG(
+                key_type*& bucket_plainkeys = m_plainkeys[bucket];
+                size_t plain_position = -1ULL;
+                for(size_t i = 0; i < bucket_size; ++i) { 
+                    const key_type read_quotient = bucket_keys.read(i, key_bitwidth);
+                    ON_DEBUG(const key_type read_key = m_hash.inv_map(read_quotient, bucket, m_buckets);)
+                    DCHECK_EQ(read_key , m_plainkeys[bucket][i]);
+                    if(read_quotient  == quotient) {
+                        plain_position = 1;
+                        break;
+                    }
+                }
+        )
+        {
+            const size_t position = bucket_keys.find(key, bucket_size, key_bitwidth);
+            DCHECK_EQ(position, plain_position);
+            if(position != -1ULL) {
+                DCHECK_LT(position, bucket_size);
+                return bucket_values[position];
             }
         }
+
         if(bucket_size == max_bucket_size()) {
             if(m_elements*separate_chaining::FAIL_PERCENTAGE < max_size()) {
                 throw std::runtime_error("The chosen hash function is bad!");

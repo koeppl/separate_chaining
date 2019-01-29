@@ -75,6 +75,15 @@ void test_random(T& map) {
       for(auto el : rev) {
 	 ASSERT_EQ( map.find(el.first)->second, el.second);
       }
+      for(size_t i = 0; i < 1000; ++i) {
+	 const key_type key = random_int<key_type>(max_key);
+	 if(rev.find(key) == rev.end()) {
+	    ASSERT_EQ(map.find(key), map.end());
+	 } else {
+	    ASSERT_EQ(map.find(key)->first, rev.find(key)->first);
+	    ASSERT_EQ(map.find(key)->second, rev.find(key)->second);
+	 }
+      }
    }
 }
 
@@ -108,6 +117,10 @@ void test_random_large(T& map) {
 
 #define COMMA ,
 
+TEST_MAP(map_avx2_16,  separate_chaining_map<avx2_key_bucket COMMA uint16_t COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> map)
+TEST_MAP(map_avx2_32,  separate_chaining_map<avx2_key_bucket COMMA uint32_t COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> map)
+TEST_MAP(map_avx2_Xor, separate_chaining_map<avx2_key_bucket COMMA uint32_t COMMA xorshift_hash> map(32))
+
 TEST_MAP(keysplit_adapter64, keysplit_adapter64<separate_chaining_map<varwidth_key_bucket COMMA uint16_t COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> COMMA separate_chaining_map<plain_key_bucket<uint64_t> COMMA uint16_t COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> > map)
 
 TEST_MAP(keysplit_adapter, keysplit_adapter<separate_chaining_map<varwidth_key_bucket COMMA uint16_t COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>>> map)
@@ -115,6 +128,7 @@ TEST_MAP(keysplit_adapter, keysplit_adapter<separate_chaining_map<varwidth_key_b
 TEST_MAP(map_plain_16,  separate_chaining_map<plain_key_bucket<uint32_t> COMMA uint16_t COMMA hash_mapping_adapter<uint32_t COMMA SplitMix>> map)
 TEST_MAP(map_plain_32,  separate_chaining_map<plain_key_bucket<uint32_t> COMMA uint32_t COMMA hash_mapping_adapter<uint32_t COMMA SplitMix>> map)
 TEST_MAP(map_plain_Xor, separate_chaining_map<plain_key_bucket<uint32_t> COMMA uint32_t COMMA xorshift_hash> map(32))
+
 
 TEST_MAP(map_var_16,  separate_chaining_map<varwidth_key_bucket COMMA uint16_t COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> map)
 TEST_MAP(map_var_32,  separate_chaining_map<varwidth_key_bucket COMMA uint32_t COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> map)

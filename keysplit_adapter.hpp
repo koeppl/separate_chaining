@@ -59,7 +59,7 @@ class keysplit_adapter {
     }
 
     const iterator end() const {
-        return iterator { *this, -1ULL, -1ULL };
+        return iterator { *(m_maps[0]), -1ULL, -1ULL };
     }
 
     iterator find(const key_type& key) const {
@@ -107,6 +107,9 @@ class keysplit_adapter64 {
 
         const pair_type* operator->() const {
             return &m_pair;
+        }
+        bool operator==(const dummy_iterator o) const {
+           return m_pair == o.m_pair;
         }
    };
 
