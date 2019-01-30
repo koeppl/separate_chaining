@@ -6,19 +6,19 @@
 
 #include <immintrin.h>
 
-   inline void* aligned_realloc(void*const ptr, const size_t oldsize, const size_t size, const size_t alignment) {
-        DCHECK_LT(oldsize, size);
-        void* newptr = _mm_malloc(size, alignment);
+inline void* aligned_realloc(void*const ptr, const size_t oldsize, const size_t size, const size_t alignment) {
+   DCHECK_LT(oldsize, size);
+   void* newptr = _mm_malloc(size, alignment);
 
-        for(size_t i = 0; i < oldsize/sizeof(uint64_t); ++i) {
-            reinterpret_cast<uint64_t*>(newptr)[i] = reinterpret_cast<const uint64_t*>(ptr)[i];
-        }
-        for(size_t i = (oldsize/sizeof(uint64_t))*sizeof(uint64_t); i < oldsize; ++i) {
-            reinterpret_cast<uint8_t*>(newptr)[i] = reinterpret_cast<const uint8_t*>(ptr)[i];
-        }
-        _mm_free(ptr);
-        return newptr;
-    }
+   for(size_t i = 0; i < oldsize/sizeof(uint64_t); ++i) {
+      reinterpret_cast<uint64_t*>(newptr)[i] = reinterpret_cast<const uint64_t*>(ptr)[i];
+   }
+   for(size_t i = (oldsize/sizeof(uint64_t))*sizeof(uint64_t); i < oldsize; ++i) {
+      reinterpret_cast<uint8_t*>(newptr)[i] = reinterpret_cast<const uint8_t*>(ptr)[i];
+   }
+   _mm_free(ptr);
+   return newptr;
+}
 
 
 template<class key_t>
@@ -142,82 +142,13 @@ class avx2_key_bucket {
 
 
 
-template<class key_t, class allocator_t>
-class class_key_bucket {
-    public:
-    using key_type = key_t;
-    using allocator_type = allocator_t;
-
-    private:
-    allocator_type allocator;
-    key_type* m_keys = nullptr; //!bucket for keys
-    ON_DEBUG(size_t m_length;)
-
-    public:
-
-    void clear() {
-        if(m_keys != nullptr) {
-            allocator.deallocate(m_keys);
-        }
-        m_keys = nullptr;
-    }
-
-    class_key_bucket() = default;
-
-    void initiate() {
-        m_keys = allocator.template allocate<key_type>(1);
-        ON_DEBUG(m_length = 1;)
-    }
-
-    void increment_size(const size_t size, [[maybe_unused]] const size_t width) {
-        key_type* keys = allocator.template allocate<key_type>(size);
-        for(size_t i = 0; i < size-1; ++i) {
-            keys[i] = std::move(m_keys[i]);
-        }
-        allocator.deallocate(m_keys);
-        m_keys = keys;
-        ON_DEBUG(m_length = size;)
-    }
-
-    void write(const size_t i, const key_type& key, [[maybe_unused]] const uint_fast8_t width) {
-        DCHECK_LT(i, m_length);
-        m_keys[i] = key;
-    }
-    key_type read(size_t i, [[maybe_unused]]  size_t width) const {
-        DCHECK_LT(i, m_length);
-        return m_keys[i];
-    }
-    size_t find(const key_type& key, const size_t length, [[maybe_unused]] const size_t width) const {
-       for(size_t i = 0; i < length; ++i) {
-          if(m_keys[i] == key) return i;
-       }
-       return -1ULL;
-    }
-
-    ~class_key_bucket() { clear(); }
-
-    class_key_bucket(class_key_bucket&& other) 
-        : m_keys(std::move(other.m_keys))
-    {
-        other.m_keys = nullptr;
-    }
-
-    class_key_bucket& operator=(class_key_bucket&& other) {
-        clear();
-        m_keys = std::move(other.m_keys);
-        other.m_keys = nullptr;
-        return *this;
-    }
-
-};
-
 
 template<class key_t>
 class plain_key_bucket {
     public:
     using key_type = key_t;
 
-    private:
+    protected:
     key_type* m_keys = nullptr; //!bucket for keys
     ON_DEBUG(size_t m_length;)
 
@@ -231,12 +162,21 @@ class plain_key_bucket {
 
     plain_key_bucket() = default;
 
+    key_type& operator[](const size_t index) {
+        DCHECK_LT(index, m_length);
+        return m_keys[index];
+    }
+    const key_type& operator[](const size_t index) const {
+        DCHECK_LT(index, m_length);
+        return m_keys[index];
+    }
+
     void initiate() {
         m_keys = reinterpret_cast<key_type*>  (malloc(sizeof(key_type)));
         ON_DEBUG(m_length = 1;)
     }
 
-    void increment_size(const size_t size, [[maybe_unused]] const size_t width) {
+    void increment_size(const size_t size, [[maybe_unused]] const size_t width = 0) {
         m_keys = reinterpret_cast<key_type*>  (realloc(m_keys, sizeof(key_type)*size));
         ON_DEBUG(m_length = size;)
     }
@@ -263,6 +203,11 @@ class plain_key_bucket {
     {
         other.m_keys = nullptr;
     }
+    plain_key_bucket(key_type*&& keys) 
+        : m_keys(std::move(keys))
+    {
+        keys = nullptr;
+    }
 
     plain_key_bucket& operator=(plain_key_bucket&& other) {
         clear();
@@ -270,6 +215,60 @@ class plain_key_bucket {
         other.m_keys = nullptr;
         return *this;
     }
+};
+
+template<class key_t, class allocator_t>
+class class_key_bucket : public plain_key_bucket<key_t> {
+    public:
+    using key_type = typename plain_key_bucket<key_t>::key_type;
+    using super_class = plain_key_bucket<key_t>;
+    using allocator_type = allocator_t;
+
+    private:
+    allocator_type allocator;
+    ON_DEBUG(size_t m_length;)
+
+    public:
+
+    void clear() override {
+        if(super_class::m_keys != nullptr) {
+            allocator.deallocate(super_class::m_keys);
+        }
+        super_class::m_keys = nullptr;
+    }
+
+    class_key_bucket() = default;
+
+    void initiate() override {
+        super_class::m_keys = allocator.template allocate<key_type>(1);
+        ON_DEBUG(m_length = 1;)
+    }
+
+    void increment_size(const size_t size, [[maybe_unused]] const size_t width)  override {
+        key_type* keys = allocator.template allocate<key_type>(size);
+        for(size_t i = 0; i < size-1; ++i) {
+            keys[i] = std::move(super_class::m_keys[i]);
+        }
+        allocator.deallocate(super_class::m_keys);
+        super_class::m_keys = keys;
+        ON_DEBUG(m_length = size;)
+    }
+
+    ~class_key_bucket() { clear(); }
+
+    class_key_bucket(class_key_bucket&& other) 
+        : super_class(std::move(other.super_class::m_keys))
+    {
+        other.super_class::m_keys = nullptr;
+    }
+
+    class_key_bucket& operator=(class_key_bucket&& other) {
+        clear();
+        super_class::m_keys = std::move(other.m_keys);
+        other.m_keys = nullptr;
+        return *this;
+    }
+
 };
 
 class varwidth_key_bucket {

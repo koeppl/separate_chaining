@@ -9,6 +9,7 @@
 using bijective_hash = poplar::bijective_hash::Xorshift;
 
 
+#define COMMA ,
 
 template<class T>
 T random_int(const T& maxvalue) {
@@ -17,7 +18,40 @@ T random_int(const T& maxvalue) {
 
 
 template<class T>
-void test_id(T& map) {
+void test_set_random(T& set) {
+   using key_type = typename T::key_type;
+   const uint64_t max_key = set.max_key();
+   for(size_t reps = 0; reps < 1000; ++reps) {
+
+      set.clear();
+      std::set<typename T::key_type> rev;
+      for(size_t i = 0; i < 1000; ++i) {
+	 const key_type key = random_int<key_type>(max_key);
+	 rev.insert(key); 
+	 set[key];
+	 ASSERT_EQ(set.size(), rev.size());
+      }
+      for(auto el : rev) {
+	 ASSERT_NE( set.find(el), set.end());
+      }
+      for(size_t i = 0; i < 1000; ++i) {
+	 const key_type key = random_int<key_type>(max_key);
+	 if(rev.find(key) == rev.end()) {
+	    ASSERT_EQ(set.find(key), set.end());
+	 } else {
+	    ASSERT_NE(set.find(key), set.end());
+	 }
+      }
+   }
+}
+TEST(set_plain_32, random) { 
+   separate_chaining_map<plain_key_bucket<uint32_t> COMMA null_value_bucket COMMA hash_mapping_adapter<uint32_t COMMA SplitMix>> set;
+   test_set_random(set);
+} 
+
+
+template<class T>
+void test_map_id(T& map) {
    const uint64_t max_key = std::min<uint64_t>(std::numeric_limits<uint16_t>::max(), map.max_key());
    DCHECK_LE(max_key, std::numeric_limits<typename T::value_type>::max());
 
@@ -35,7 +69,7 @@ void test_id(T& map) {
    ASSERT_EQ(map.size(), size);
 }
 template<class T>
-void test_rev(T& map) {
+void test_map_reverse(T& map) {
    const uint64_t max_key = std::min<uint64_t>(std::numeric_limits<uint16_t>::max(), map.max_key());
    DCHECK_LE(max_key, std::numeric_limits<typename T::value_type>::max());
 
@@ -54,7 +88,7 @@ void test_rev(T& map) {
 
 
 template<class T>
-void test_random(T& map) {
+void test_map_random(T& map) {
    using key_type = typename T::key_type;
    using value_type = typename T::value_type;
    const uint64_t max_key = map.max_key();
@@ -85,7 +119,7 @@ void test_random(T& map) {
 }
 
 template<class T>
-void test_random_large(T& map) {
+void test_map_random_large(T& map) {
    using key_type = typename T::key_type;
    using value_type = typename T::value_type;
    const uint64_t max_key = map.max_key();
@@ -106,37 +140,36 @@ void test_random_large(T& map) {
 
 
 #define TEST_MAP(x,y) \
-   TEST(x, id) { y; test_id(map); } \
-   TEST(x, reverse) { y; test_rev(map); } \
-   TEST(x, random) { y; test_random(map); } \
-   TEST(x, random_large) { y; test_random_large(map); } \
+   TEST(x, id) { y; test_map_id(map); } \
+   TEST(x, reverse) { y; test_map_reverse(map); } \
+   TEST(x, random) { y; test_map_random(map); } \
+   TEST(x, random_large) { y; test_map_random_large(map); } \
 
 
-#define COMMA ,
-TEST_MAP(map_avx2_16_16,  separate_chaining_map<avx2_key_bucket<uint16_t> COMMA uint16_t COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> map)
-TEST_MAP(map_avx2_8_16,  separate_chaining_map<avx2_key_bucket<uint8_t> COMMA uint16_t COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> map)
+TEST_MAP(map_avx2_16_16,  separate_chaining_map<avx2_key_bucket<uint16_t> COMMA plain_key_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> map)
+TEST_MAP(map_avx2_8_16,  separate_chaining_map<avx2_key_bucket<uint8_t> COMMA plain_key_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> map)
 
-TEST_MAP(map_avx2_32_16,  separate_chaining_map<avx2_key_bucket<uint32_t> COMMA uint16_t COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> map)
-TEST_MAP(map_avx2_32_32,  separate_chaining_map<avx2_key_bucket<uint32_t> COMMA uint32_t COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> map)
-TEST_MAP(map_avx2_32_Xor, separate_chaining_map<avx2_key_bucket<uint32_t> COMMA uint32_t COMMA xorshift_hash> map(32))
+TEST_MAP(map_avx2_32_16,  separate_chaining_map<avx2_key_bucket<uint32_t> COMMA plain_key_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> map)
+TEST_MAP(map_avx2_32_32,  separate_chaining_map<avx2_key_bucket<uint32_t> COMMA plain_key_bucket<uint32_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> map)
+TEST_MAP(map_avx2_32_Xor, separate_chaining_map<avx2_key_bucket<uint32_t> COMMA plain_key_bucket<uint32_t> COMMA xorshift_hash> map(32))
 
-TEST_MAP(map_avx2_64_16,  separate_chaining_map<avx2_key_bucket<uint64_t> COMMA uint16_t COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> map)
-TEST_MAP(map_avx2_64_32,  separate_chaining_map<avx2_key_bucket<uint64_t> COMMA uint32_t COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> map)
-TEST_MAP(map_avx2_64_Xor, separate_chaining_map<avx2_key_bucket<uint64_t> COMMA uint32_t COMMA xorshift_hash> map(32))
+TEST_MAP(map_avx2_64_16,  separate_chaining_map<avx2_key_bucket<uint64_t> COMMA plain_key_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> map)
+TEST_MAP(map_avx2_64_32,  separate_chaining_map<avx2_key_bucket<uint64_t> COMMA plain_key_bucket<uint32_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> map)
+TEST_MAP(map_avx2_64_Xor, separate_chaining_map<avx2_key_bucket<uint64_t> COMMA plain_key_bucket<uint32_t> COMMA xorshift_hash> map(32))
 
-TEST_MAP(keysplit_adapter64, keysplit_adapter64<separate_chaining_map<varwidth_key_bucket COMMA uint16_t COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> COMMA separate_chaining_map<plain_key_bucket<uint64_t> COMMA uint16_t COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> > map)
+TEST_MAP(keysplit_adapter64, keysplit_adapter64<separate_chaining_map<varwidth_key_bucket COMMA plain_key_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> COMMA separate_chaining_map<plain_key_bucket<uint64_t> COMMA plain_key_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> > map)
 
-TEST_MAP(keysplit_adapter, keysplit_adapter<separate_chaining_map<varwidth_key_bucket COMMA uint16_t COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>>> map)
-
-
-TEST_MAP(map_plain_16,  separate_chaining_map<plain_key_bucket<uint32_t> COMMA uint16_t COMMA hash_mapping_adapter<uint32_t COMMA SplitMix>> map)
-TEST_MAP(map_plain_32,  separate_chaining_map<plain_key_bucket<uint32_t> COMMA uint32_t COMMA hash_mapping_adapter<uint32_t COMMA SplitMix>> map)
-TEST_MAP(map_plain_Xor, separate_chaining_map<plain_key_bucket<uint32_t> COMMA uint32_t COMMA xorshift_hash> map(32))
+TEST_MAP(keysplit_adapter, keysplit_adapter<separate_chaining_map<varwidth_key_bucket COMMA plain_key_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>>> map)
 
 
-TEST_MAP(map_var_16,  separate_chaining_map<varwidth_key_bucket COMMA uint16_t COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> map)
-TEST_MAP(map_var_32,  separate_chaining_map<varwidth_key_bucket COMMA uint32_t COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> map)
-TEST_MAP(map_var_Xor, separate_chaining_map<varwidth_key_bucket COMMA uint32_t COMMA xorshift_hash> map(32))
+TEST_MAP(map_plain_16,  separate_chaining_map<plain_key_bucket<uint32_t> COMMA plain_key_bucket<uint16_t> COMMA hash_mapping_adapter<uint32_t COMMA SplitMix>> map)
+TEST_MAP(map_plain_32,  separate_chaining_map<plain_key_bucket<uint32_t> COMMA plain_key_bucket<uint32_t> COMMA hash_mapping_adapter<uint32_t COMMA SplitMix>> map)
+TEST_MAP(map_plain_Xor, separate_chaining_map<plain_key_bucket<uint32_t> COMMA plain_key_bucket<uint32_t> COMMA xorshift_hash> map(32))
+
+
+TEST_MAP(map_var_16,  separate_chaining_map<varwidth_key_bucket COMMA plain_key_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> map)
+TEST_MAP(map_var_32,  separate_chaining_map<varwidth_key_bucket COMMA plain_key_bucket<uint32_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> map)
+TEST_MAP(map_var_Xor, separate_chaining_map<varwidth_key_bucket COMMA plain_key_bucket<uint32_t> COMMA xorshift_hash> map(32))
 
 
 
@@ -149,7 +182,7 @@ TEST(separate_chaining_map, step) {
    constexpr size_t NUM_RANGE = 32;
 
    std::unordered_map<uint64_t,uint64_t> rev;
-   separate_chaining_map<plain_key_bucket<uint32_t>, uint64_t, hash_mapping_adapter<uint32_t, SplitMix>> map(NUM_RANGE);
+   separate_chaining_map<plain_key_bucket<uint32_t>, plain_key_bucket<uint64_t>, hash_mapping_adapter<uint32_t, SplitMix>> map(NUM_RANGE);
    for(size_t i = 0; i < NUM_ELEMENTS; ++i) {
       size_t key= random_int(1ULL<<NUM_RANGE);
       map[key] = rev[key] = i;
@@ -160,6 +193,9 @@ TEST(separate_chaining_map, step) {
    }
 
 }
+
+
+
 
 int main(int argc, char **argv) {
 
