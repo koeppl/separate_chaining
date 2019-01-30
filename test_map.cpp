@@ -49,6 +49,19 @@ TEST(set_plain_32, random) {
    test_set_random(set);
 } 
 
+template<class T>
+void test_map_outlier(T& map) {
+   const uint_fast8_t max_bits = map.key_bit_width();
+   for(size_t i = 0; i < max_bits; ++i) {
+      map[1ULL<<i] = i;
+      ASSERT_EQ(map.size(), i+1);
+   }
+   map[map.max_key()] = max_bits;
+   for(size_t i = 0; i < max_bits; ++i) {
+      ASSERT_EQ(map[1ULL<<i], i);
+   }
+   ASSERT_EQ(map[map.max_key()], max_bits);
+}
 
 template<class T>
 void test_map_id(T& map) {
@@ -67,6 +80,10 @@ void test_map_id(T& map) {
       map[i] = i;
    }
    ASSERT_EQ(map.size(), size);
+   for(size_t i = 0; i < max_key; ++i) {
+      ASSERT_EQ(map.erase(i),1);
+   }
+   ASSERT_EQ(map.size(), 0);
 }
 template<class T>
 void test_map_reverse(T& map) {
@@ -80,10 +97,16 @@ void test_map_reverse(T& map) {
       ASSERT_EQ(map[max_key-i], i);
    }
    const size_t size = map.size();
+   //idempotent
    for(size_t i = 0; i < max_key; ++i) {
       map[max_key-i] = i;
    }
    ASSERT_EQ(map.size(), size);
+   //erase
+   for(size_t i = 0; i < max_key; ++i) {
+      ASSERT_EQ(map.erase(max_key-i),1);
+   }
+   ASSERT_EQ(map.size(), 0);
 }
 
 
@@ -101,6 +124,12 @@ void test_map_random(T& map) {
 	 const key_type key = random_int<key_type>(max_key);
 	 const value_type val = random_int<value_type>(max_value);
 	 map[key] = rev[key] = val;
+	 ASSERT_EQ(map.size(), rev.size());
+      }
+      for(size_t i = 0; i < 1000; ++i) {
+	 const key_type key = random_int<key_type>(max_key);
+	 const int removed_elements = rev.erase(key);
+	 ASSERT_EQ(map.erase(key), removed_elements);
 	 ASSERT_EQ(map.size(), rev.size());
       }
       for(auto el : rev) {
@@ -142,6 +171,7 @@ void test_map_random_large(T& map) {
 #define TEST_MAP(x,y) \
    TEST(x, id) { y; test_map_id(map); } \
    TEST(x, reverse) { y; test_map_reverse(map); } \
+   TEST(x, outlier) { y; test_map_outlier(map); } \
    TEST(x, random) { y; test_map_random(map); } \
    TEST(x, random_large) { y; test_map_random_large(map); } \
 

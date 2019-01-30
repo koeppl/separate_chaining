@@ -4,6 +4,7 @@
 #include <numeric>
 #include <limits>
 #include <algorithm>
+#include "dcheck.hpp"
 
 /** can be used for keys in [0 .. max-1], where max = std::numeric_limits<uint64_t>::max()
  * max_bits: maximum number of bits a key can have
@@ -23,9 +24,12 @@ class keysplit_adapter {
    using value_type = typename map_type::value_type;
    using key_type = typename map_type::key_type;
    using iterator = typename map_type::iterator;
+   using size_type = typename map_type::size_type;
 
     //! returns the maximum value of a key that can be stored
-   constexpr key_type max_key() const { return std::numeric_limits<key_type>::max(); }
+   constexpr key_type max_key() const { return std::min<key_type>( (-1ULL)>>(64-max_bits), std::numeric_limits<key_type>::max()); }
+
+   constexpr uint_fast8_t key_bit_width() const { return max_bits; }
 
    void clear() {
       for(std::size_t i = 0; i < m_length; ++i) {
@@ -44,6 +48,8 @@ class keysplit_adapter {
       }
    }
 
+
+
     //! @see std::unordered_map
     bool empty() const { 
       for(std::size_t i = 0; i < m_length; ++i) {
@@ -60,6 +66,13 @@ class keysplit_adapter {
 
     const iterator end() const {
         return m_maps[0]->end();
+    }
+
+    size_type erase(const key_type& key) {
+       const uint_fast8_t key_bit_width = bit_width(key);
+       const uint_fast8_t slot = key_bit_width == 0 ? 0 : (key_bit_width-1)/m_interval;
+       DCHECK_LT(slot, m_length);
+       return m_maps[slot]->erase(key);
     }
 
     iterator find(const key_type& key) const {
@@ -96,7 +109,6 @@ class keysplit_adapter64 {
    static std::size_t constexpr m_interval = max_bits / m_length;
    static_assert(max_bits > m_length, "m_length is smaller than max_bits");
 
-
    public:
 
    class dummy_iterator {
@@ -117,10 +129,12 @@ class keysplit_adapter64 {
    };
 
 
+   using size_type = typename large_map_type::size_type;
    using iterator = dummy_iterator;
 
     //! returns the maximum value of a key that can be stored
    constexpr key_type max_key() const { return std::numeric_limits<key_type>::max(); }
+   constexpr uint_fast8_t key_bit_width() const { return max_bits; }
 
    void clear() {
       m_adapter.clear();
@@ -146,13 +160,20 @@ class keysplit_adapter64 {
         return iterator { std::make_pair<key_type, value_type>(0,0), true };
     }
 
+    size_type erase(const key_type& key) {
+       if(bit_width(key) < max_bits-m_adapter.m_interval) {
+          return m_adapter.erase(key);
+       } else {
+          return m_large_map.erase(key);
+       }
+    }
+
     iterator find(const key_type& key) const {
        if(bit_width(key) < max_bits-m_adapter.m_interval) {
           auto it = m_adapter.find(key);
           if(it == m_adapter.end()) return end();
           return dummy_iterator {std::make_pair(it->first, it->second) };
-       }
-       else {
+       } else {
           auto it = m_large_map.find(key);
           if(it == m_large_map.end()) return end();
           return dummy_iterator {std::make_pair(it->first, it->second)};

@@ -18,7 +18,6 @@ namespace separate_chaining {
 }
 
 
-
 template<class hash_map>
 struct separate_chaining_iterator {
     public:
@@ -61,6 +60,7 @@ struct separate_chaining_iterator {
 };
 
 
+//! dummy class
 class null_value_bucket {
     bool m_true = true;
     public:
@@ -139,6 +139,8 @@ class separate_chaining_map {
     //! returns the maximum value of a key that can be stored
     key_type max_key() const { return (-1ULL) >> (64-m_width); }
 
+    //! returns the bit width of the keys
+    uint_fast8_t key_bit_width() const { return m_width; }
 
     //! @see std::unordered_map
     bool empty() const { return m_elements == 0; } 
@@ -310,6 +312,43 @@ class separate_chaining_map {
         return end();
     }
 
+    std::pair<size_t, bucketsize_type> locate(const key_type& key) {
+        if(m_buckets == 0) reserve(separate_chaining::INITIAL_BUCKETS);
+        auto mapped = m_hash.map(key, m_buckets);
+        const key_type& quotient = mapped.first; 
+        const size_t& bucket = mapped.second;
+        const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
+        DCHECK_LE(most_significant_bit(quotient), key_bitwidth);
+
+        DCHECK_EQ(m_hash.inv_map(mapped.first, mapped.second, m_buckets), key);
+
+        bucketsize_type& bucket_size = m_bucketsizes[bucket];
+        key_bucket_type& bucket_keys = m_keys[bucket];
+
+        ON_DEBUG(
+                key_type*& bucket_plainkeys = m_plainkeys[bucket];
+                bucketsize_type plain_position = static_cast<bucketsize_type>(-1ULL);
+                for(size_t i = 0; i < bucket_size; ++i) { 
+                    const key_type read_quotient = bucket_keys.read(i, key_bitwidth);
+                    ON_DEBUG(const key_type read_key = m_hash.inv_map(read_quotient, bucket, m_buckets);)
+                    DCHECK_EQ(read_key , bucket_plainkeys[i]);
+                    if(read_quotient  == quotient) {
+                        plain_position = i;
+                        break;
+                    }
+                }
+        )
+        {
+            const bucketsize_type position = static_cast<bucketsize_type>(bucket_keys.find(quotient, bucket_size, key_bitwidth));
+            DCHECK_EQ(position, plain_position);
+            if(position != static_cast<bucketsize_type>(-1ULL)) {
+                DCHECK_LT(position, bucket_size);
+                return std::make_pair(bucket, position);
+            }
+        }
+        return std::make_pair(bucket, -1ULL);
+    }
+
     value_type& operator[](const key_type& key) {
         if(m_buckets == 0) reserve(separate_chaining::INITIAL_BUCKETS);
         auto mapped = m_hash.map(key, m_buckets);
@@ -326,7 +365,7 @@ class separate_chaining_map {
 
         ON_DEBUG(
                 key_type*& bucket_plainkeys = m_plainkeys[bucket];
-                size_t plain_position = -1ULL;
+                bucketsize_type plain_position = static_cast<bucketsize_type>(-1ULL);
                 for(size_t i = 0; i < bucket_size; ++i) { 
                     const key_type read_quotient = bucket_keys.read(i, key_bitwidth);
                     ON_DEBUG(const key_type read_key = m_hash.inv_map(read_quotient, bucket, m_buckets);)
@@ -338,9 +377,9 @@ class separate_chaining_map {
                 }
         )
         {
-            const size_t position = bucket_keys.find(quotient, bucket_size, key_bitwidth);
+            const bucketsize_type position = static_cast<bucketsize_type>(bucket_keys.find(quotient, bucket_size, key_bitwidth));
             DCHECK_EQ(position, plain_position);
-            if(position != -1ULL) {
+            if(position != static_cast<bucketsize_type>(-1ULL)) {
                 DCHECK_LT(position, bucket_size);
                 return bucket_values[position];
             }
@@ -378,5 +417,34 @@ class separate_chaining_map {
     }
 
     ~separate_chaining_map() { clear(); }
+
+    size_type count(const key_type& key ) const {
+        return find(key) == end() ? 0 : 1;
+    }
+    size_type erase(const key_type& key) {
+        const auto location = locate(key);
+        const auto& bucket = location.first;
+        const auto& position = location.second;
+
+        bucketsize_type& bucket_size = m_bucketsizes[bucket];
+        key_bucket_type& bucket_keys = m_keys[bucket];
+        value_bucket_type& bucket_values = m_values[bucket];
+        ON_DEBUG(key_type*& bucket_plainkeys = m_plainkeys[bucket];)
+
+        if(position == static_cast<bucketsize_type>(-1ULL)) return 0;
+
+        const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
+
+        for(size_t i = position+1; i < bucket_size; ++i) {
+            bucket_keys.write(i-1, bucket_keys.read(i, key_bitwidth), key_bitwidth);
+            ON_DEBUG(bucket_plainkeys[i-1] = bucket_plainkeys[i];)
+            bucket_values[i-1] = bucket_values[i];
+        }
+        --bucket_size;
+        --m_elements;
+        return 1;
+    }
+
+
 
 };
