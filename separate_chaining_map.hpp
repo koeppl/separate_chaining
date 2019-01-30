@@ -22,19 +22,32 @@ namespace separate_chaining {
 template<class hash_map>
 struct separate_chaining_iterator {
     public:
+        using key_type = typename hash_map::key_type;
+        using value_type = typename hash_map::value_type;
+        using pair_type = std::pair<key_type, value_type>;
         const hash_map& m_map;
         size_t m_bucket;
         size_t m_position;
 
-        std::pair<bool, typename hash_map::value_type> m_pair;
+        pair_type m_pair;
 
         separate_chaining_iterator(const hash_map& map, size_t bucket, size_t position) 
             : m_map(map), m_bucket(bucket), m_position(position) {
             }
 
-        const std::pair<bool, typename hash_map::value_type>* operator->()  {
-            m_pair = m_bucket < m_map.bucket_count() ? std::make_pair(true, m_map.m_values[m_bucket][m_position]) : 
-                std::make_pair(false, typename hash_map::value_type(0));
+        const pair_type* operator->()  {
+            if(m_bucket >= m_map.bucket_count()) {
+                m_bucket = 0;
+            }
+            if(m_position >= m_map.bucket_size(m_bucket)) {
+                m_position = 0;
+            }
+
+            const uint_fast8_t key_bitwidth = m_map.m_hash.remainder_width(m_map.m_buckets);
+            const key_type read_quotient = m_map.m_keys[m_bucket].read(m_position, key_bitwidth);
+            const key_type read_key = m_map.m_hash.inv_map(read_quotient, m_bucket, m_map.m_buckets);
+
+            m_pair = std::make_pair(read_key, m_map.m_values[m_bucket][m_position]);
             return &m_pair;
         }
         bool operator!=(const separate_chaining_iterator o) const {
@@ -272,7 +285,7 @@ class separate_chaining_map {
         )
 
         {
-            const size_t position = bucket_keys.find(key, bucket_size, key_bitwidth);
+            const size_t position = bucket_keys.find(quotient, bucket_size, key_bitwidth);
             DCHECK_EQ(position, plain_position);
             if(position != -1ULL) {
                 DCHECK_LT(position, bucket_size);
@@ -305,13 +318,13 @@ class separate_chaining_map {
                     ON_DEBUG(const key_type read_key = m_hash.inv_map(read_quotient, bucket, m_buckets);)
                     DCHECK_EQ(read_key , m_plainkeys[bucket][i]);
                     if(read_quotient  == quotient) {
-                        plain_position = 1;
+                        plain_position = i;
                         break;
                     }
                 }
         )
         {
-            const size_t position = bucket_keys.find(key, bucket_size, key_bitwidth);
+            const size_t position = bucket_keys.find(quotient, bucket_size, key_bitwidth);
             DCHECK_EQ(position, plain_position);
             if(position != -1ULL) {
                 DCHECK_LT(position, bucket_size);

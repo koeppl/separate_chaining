@@ -6,23 +6,59 @@
 
 #include <immintrin.h>
 
-   inline void* aligned_realloc(void* ptr, const size_t oldsize, const size_t size, const size_t alignment) {
+   inline void* aligned_realloc(void*const ptr, const size_t oldsize, const size_t size, const size_t alignment) {
         DCHECK_LT(oldsize, size);
         void* newptr = _mm_malloc(size, alignment);
 
         for(size_t i = 0; i < oldsize/sizeof(uint64_t); ++i) {
-            reinterpret_cast<uint64_t*>(newptr)[i] = reinterpret_cast<uint64_t*>(ptr)[i];
+            reinterpret_cast<uint64_t*>(newptr)[i] = reinterpret_cast<const uint64_t*>(ptr)[i];
         }
-        for(size_t i = (oldsize/sizeof(uint64_t))*sizeof(uint64_t)+1; i < oldsize; ++i) {
-            reinterpret_cast<uint8_t*>(newptr)[i] = reinterpret_cast<uint8_t*>(ptr)[i];
+        for(size_t i = (oldsize/sizeof(uint64_t))*sizeof(uint64_t); i < oldsize; ++i) {
+            reinterpret_cast<uint8_t*>(newptr)[i] = reinterpret_cast<const uint8_t*>(ptr)[i];
         }
         _mm_free(ptr);
         return newptr;
     }
 
+
+template<class key_t>
+struct avx_functions {
+   public:
+   using key_type = key_t;
+   static __m256i load(key_type i);
+   static __m256i compare(__m256i a, __m256i b);
+};
+
+template<>
+struct avx_functions<uint32_t> {
+   static __m256i load(uint32_t i) { return _mm256_set1_epi32(i); }
+   static __m256i compare(__m256i a, __m256i b) { return _mm256_cmpeq_epi32(a,b); }
+};
+
+template<>
+struct avx_functions<uint64_t> {
+   static __m256i load(uint64_t i) { return _mm256_set1_epi64x(i); }
+   static __m256i compare(__m256i a, __m256i b) { return _mm256_cmpeq_epi64(a,b); }
+};
+
+template<>
+struct avx_functions<uint16_t> {
+   static __m256i load(uint16_t i) { return _mm256_set1_epi16(i); }
+   static __m256i compare(__m256i a, __m256i b) { return _mm256_cmpeq_epi16(a,b); }
+};
+
+template<>
+struct avx_functions<uint8_t> {
+   static __m256i load(uint8_t i) { return _mm256_set1_epi8(i); }
+   static __m256i compare(__m256i a, __m256i b) { return _mm256_cmpeq_epi8(a,b); }
+};
+
+
+
+template<class key_t>
 class avx2_key_bucket {
     public:
-    using key_type = uint64_t;
+    using key_type = key_t;
 
     private:
     static constexpr size_t m_alignment = 32;
@@ -61,23 +97,29 @@ class avx2_key_bucket {
         return m_keys[i];
     }
 
-    size_t find(const key_type& key, const size_t length, [[maybe_unused]] const size_t width) const {
-        constexpr size_t register_size = 256/sizeof(key_type);
-        const __m256i pattern = _mm256_set1_epi64x(key);
-// avx_key_bucket
-//TODO: avx2 __m256i _mm256_broadcastw_epi16 (__m128i a) and __m256i _mm256_cmpeq_epi8 (__m256i a, __m256i b)
-       for(size_t i = 0; i < length/register_size; ++i) {
+    size_t find(const uint64_t& key, const size_t length, [[maybe_unused]] const size_t width) const {
+     constexpr size_t register_size = 32/sizeof(key_type); // number of `key_type` elements fitting in 256 bits = 32 bytes
+     if(length >= register_size) {
+        const __m256i pattern = avx_functions<key_type>::load(key);
+        // avx_key_bucket
+        //TODO: avx2 __m256i _mm256_broadcastw_epi16 (__m128i a) and __m256i _mm256_cmpeq_epi8 (__m256i a, __m256i b)
+        for(size_t i = 0; i < length/register_size; ++i) {
            __m256i ma = _mm256_load_si256((__m256i*)(m_keys+i*register_size)); 
-           const unsigned int mask = _mm256_movemask_epi8(_mm256_cmpeq_epi64(ma, pattern));
+           const unsigned int mask = _mm256_movemask_epi8(avx_functions<key_type>::compare(ma, pattern));
            if(mask == 0) { continue; }
            if(~mask == 0) { return i*register_size; }
-           const size_t least_significant = __builtin_ctz(~mask);
-           DCHECK_EQ(((least_significant)/8)*8, least_significant);
-           const size_t pos = (least_significant)/8;
+           const size_t least_significant = __builtin_ctz(mask);
+           DCHECK_EQ(((least_significant)/sizeof(key_type))*sizeof(key_type), least_significant);
+           const size_t pos = (least_significant)/sizeof(key_type);
            return i*register_size+pos;
-       }
-       return -1ULL;
+        }
+     }
+    for(size_t i = (length/register_size)*register_size; i < length; ++i) {
+       if(m_keys[i] == key) return i;
     }
+    return -1ULL;
+ }
+
 
     ~avx2_key_bucket() { clear(); }
 
@@ -93,7 +135,11 @@ class avx2_key_bucket {
         other.m_keys = nullptr;
         return *this;
     }
+
 };
+
+
+
 
 
 template<class key_t, class allocator_t>

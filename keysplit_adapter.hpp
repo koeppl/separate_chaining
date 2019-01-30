@@ -59,7 +59,7 @@ class keysplit_adapter {
     }
 
     const iterator end() const {
-        return iterator { *(m_maps[0]), -1ULL, -1ULL };
+        return m_maps[0]->end();
     }
 
     iterator find(const key_type& key) const {
@@ -100,15 +100,18 @@ class keysplit_adapter64 {
    public:
 
    class dummy_iterator {
-        using pair_type = std::pair<bool, value_type>;
+        using pair_type = std::pair<key_type, value_type>;
         pair_type m_pair;
+        bool m_end;
       public:
-        dummy_iterator(pair_type&& other) : m_pair(std::move(other)) {}
+        dummy_iterator(pair_type&& other, bool end = false) : m_pair(std::move(other)), m_end(end) {}
 
         const pair_type* operator->() const {
             return &m_pair;
         }
         bool operator==(const dummy_iterator o) const {
+           if(o.m_end == true && m_end == true) return true;
+           if(o.m_end != m_end) return false;
            return m_pair == o.m_pair;
         }
    };
@@ -140,16 +143,18 @@ class keysplit_adapter64 {
     }
 
     const iterator end() const {
-        return iterator { std::make_pair(false, 0) };
+        return iterator { std::make_pair<key_type, value_type>(0,0), true };
     }
 
     iterator find(const key_type& key) const {
        if(bit_width(key) < max_bits-m_adapter.m_interval) {
           auto it = m_adapter.find(key);
+          if(it == m_adapter.end()) return end();
           return dummy_iterator {std::make_pair(it->first, it->second) };
        }
        else {
           auto it = m_large_map.find(key);
+          if(it == m_large_map.end()) return end();
           return dummy_iterator {std::make_pair(it->first, it->second)};
        }
     }
