@@ -88,6 +88,13 @@ class keysplit_adapter {
        DCHECK_LT(slot, m_length);
        return (*m_maps[slot])[key];
     }
+
+    size_type count(const key_type& key ) const {
+       const uint_fast8_t key_bit_width = bit_width(key);
+       const uint_fast8_t slot = key_bit_width == 0 ? 0 : (key_bit_width-1)/m_interval;
+       DCHECK_LT(slot, m_length);
+       return m_maps[slot]->count(key);
+    }
 };
 
 
@@ -158,6 +165,14 @@ class keysplit_adapter64 {
 
     const iterator end() const {
         return iterator { std::make_pair<key_type, value_type>(0,0), true };
+    }
+
+    size_type count(const key_type& key ) const {
+       if(bit_width(key) < max_bits-m_adapter.m_interval) {
+          return m_adapter.count(key);
+       } else {
+          return m_large_map.count(key);
+       }
     }
 
     size_type erase(const key_type& key) {

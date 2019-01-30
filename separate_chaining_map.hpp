@@ -14,7 +14,7 @@ namespace separate_chaining {
     //static constexpr size_t MAX_BUCKET_BYTESIZE = 128;
     static constexpr size_t MAX_BUCKET_BYTESIZE = 256;
     static constexpr size_t INITIAL_BUCKETS = 16;
-    static constexpr size_t FAIL_PERCENTAGE = 20;
+    // static constexpr size_t FAIL_PERCENTAGE = 810;
 }
 
 
@@ -107,6 +107,8 @@ class separate_chaining_map {
     size_t m_elements = 0; //! number of stored elements
     const uint_fast8_t m_width;
     hash_mapping_type m_hash; //! hash function
+
+
 
     void clear(const size_t bucket) { //! empties i-th bucket
         m_values[bucket].clear();
@@ -218,6 +220,7 @@ class separate_chaining_map {
     void print_stats(tdc::StatPhase& statphase) {
             statphase.log("class", typeid(class_type).name());
             statphase.log("size", size());
+            statphase.log("bytes", size_in_bytes());
             statphase.log("bucket_count", bucket_count());
             double deviation = 0;
             for(size_t i = 0; i < bucket_count(); ++i) {
@@ -312,6 +315,11 @@ class separate_chaining_map {
         return end();
     }
 
+    /*
+     * Returns the location of a key if it is stored in the table.
+     * The location is a pair consisting of the bucket and the position within the bucket.
+     * If the key is not in the table, the location is the bucket where the key should be hashed into, and the position is -1.
+     */
     std::pair<size_t, bucketsize_type> locate(const key_type& key) {
         if(m_buckets == 0) reserve(separate_chaining::INITIAL_BUCKETS);
         auto mapped = m_hash.map(key, m_buckets);
@@ -386,9 +394,9 @@ class separate_chaining_map {
         }
 
         if(bucket_size == max_bucket_size()) {
-            if(m_elements*separate_chaining::FAIL_PERCENTAGE < max_size()) {
-                throw std::runtime_error("The chosen hash function is bad!");
-            }
+            // if(m_elements*separate_chaining::FAIL_PERCENTAGE < max_size()) {
+            //     throw std::runtime_error("The chosen hash function is bad!");
+            // }
             reserve(1ULL<<(m_buckets+1));
             return operator[](key);
         }
@@ -446,5 +454,14 @@ class separate_chaining_map {
     }
 
 
+    size_type size_in_bytes() const {
+        const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
+        size_t bytes = sizeof(bucketsize_type) * bucket_count() + sizeof(m_keys) + sizeof(m_values) + sizeof(m_bucketsizes) + sizeof(m_buckets) + sizeof(m_elements) + sizeof(m_width) + sizeof(m_hash);
+        for(size_t bucket = 0; bucket < bucket_count(); ++bucket) {
+            bytes += ceil_div<size_t>(m_bucketsizes[bucket]*key_bitwidth, sizeof(key_type)*8)*sizeof(key_type);
+            bytes += sizeof(value_type)*(m_bucketsizes[bucket]); //TODO: to value-manager
+        }
+        return bytes; 
+    }
 
 };
