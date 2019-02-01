@@ -45,7 +45,7 @@ void test_set_random(T& set) {
    }
 }
 TEST(set_plain_32, random) { 
-   separate_chaining_map<plain_key_bucket<uint32_t> COMMA null_value_bucket COMMA hash_mapping_adapter<uint32_t COMMA SplitMix>> set;
+   separate_chaining_set<plain_key_bucket<uint32_t> COMMA hash_mapping_adapter<uint32_t COMMA SplitMix>> set;
    test_set_random(set);
 } 
 
