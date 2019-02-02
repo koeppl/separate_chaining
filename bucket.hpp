@@ -82,9 +82,9 @@ class avx2_key_bucket {
 
 
 
-    void increment_size(const size_t size, [[maybe_unused]] const size_t width) {
+    void resize(const size_t oldsize, const size_t size, [[maybe_unused]] const size_t width) {
 
-        m_keys = reinterpret_cast<key_type*>  (aligned_realloc(m_keys, sizeof(key_type)*(size-1),  sizeof(key_type)*size, m_alignment));
+        m_keys = reinterpret_cast<key_type*>  (aligned_realloc(m_keys, sizeof(key_type)*oldsize,  sizeof(key_type)*size, m_alignment));
         ON_DEBUG(m_length = size;)
     }
 
@@ -176,7 +176,7 @@ class plain_key_bucket {
         ON_DEBUG(m_length = 1;)
     }
 
-    void increment_size(const size_t size, [[maybe_unused]] const size_t width = 0) {
+    void resize([[maybe_unused]] const size_t oldsize, const size_t size, [[maybe_unused]] const size_t width = 0) {
         m_keys = reinterpret_cast<key_type*>  (realloc(m_keys, sizeof(key_type)*size));
         ON_DEBUG(m_length = size;)
     }
@@ -244,7 +244,7 @@ class class_key_bucket : public plain_key_bucket<key_t> {
         ON_DEBUG(m_length = 1;)
     }
 
-    void increment_size(const size_t size, [[maybe_unused]] const size_t width)  override {
+    void resize([[maybe_unused]] const size_t oldsize, const size_t size, [[maybe_unused]] const size_t width)  override {
         key_type* keys = allocator.template allocate<key_type>(size);
         for(size_t i = 0; i < size-1; ++i) {
             keys[i] = std::move(super_class::m_keys[i]);
@@ -294,8 +294,8 @@ class varwidth_key_bucket {
         ON_DEBUG(m_length = 1;)
     }
 
-    void increment_size(const size_t size, const size_t width) {
-       if(ceil_div<size_t>((size-1)*width, 64) < ceil_div<size_t>((size)*width, 64)) {
+    void resize(const size_t oldsize, const size_t size, const size_t width) {
+       if(ceil_div<size_t>((oldsize)*width, 64) < ceil_div<size_t>((size)*width, 64)) {
           m_keys = reinterpret_cast<key_type*>  (realloc(m_keys, sizeof(key_type)*ceil_div<size_t>(size*width, 64) ));
        }
        ON_DEBUG(m_length = size;)
