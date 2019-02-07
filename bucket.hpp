@@ -7,7 +7,7 @@
 #include <immintrin.h>
 
 inline void* aligned_realloc(void*const ptr, const size_t oldsize, const size_t size, const size_t alignment) {
-   DCHECK_LT(oldsize, size);
+   DCHECK_LE(oldsize, size);
    void* newptr = _mm_malloc(size, alignment);
 
    for(size_t i = 0; i < oldsize/sizeof(uint64_t); ++i) {

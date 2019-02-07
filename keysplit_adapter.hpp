@@ -31,6 +31,12 @@ class keysplit_adapter {
 
    constexpr uint_fast8_t key_bit_width() const { return max_bits; }
 
+   void shrink_to_fit() {
+      for(std::size_t i = 0; i < m_length; ++i) {
+         m_maps[i]->shrink_to_fit();
+      }
+   }
+
    void clear() {
       for(std::size_t i = 0; i < m_length; ++i) {
          m_maps[i]->clear();
@@ -198,5 +204,9 @@ class keysplit_adapter64 {
     value_type& operator[](const key_type& key) {
        return (bit_width(key) < max_bits-m_adapter.m_interval) ? m_adapter[key] : m_large_map[key];
     }
+   void shrink_to_fit() {
+      m_large_map.shrink_to_fit();
+      m_adapter.shrink_to_fit();
+   }
 };
 

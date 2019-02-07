@@ -12,10 +12,10 @@
 
 namespace separate_chaining {
     //static constexpr size_t MAX_BUCKET_BYTESIZE = 128;
-    static constexpr size_t MAX_BUCKET_BYTESIZE = 254;
-    static constexpr size_t INITIAL_BUCKETS = 16;
-    // static constexpr size_t FAIL_PERCENTAGE = 810;
-    using bucketsize_type = uint8_t; //! used for storing the sizes of the buckets
+    static constexpr size_t MAX_BUCKET_BYTESIZE = 254; //! maximum number of elements a bucket can store
+    static constexpr size_t INITIAL_BUCKETS = 16; //! number of buckets a separate hash table holds initially
+    static constexpr size_t INITIAL_BUCKET_SIZE = 1; //! number of elements a bucket can store initially
+    using bucketsize_type = uint8_t; //! type for storing the sizes of the buckets
     static_assert(MAX_BUCKET_BYTESIZE < std::numeric_limits<bucketsize_type>::max(), "enlarge separate_chaining::MAX_BUCKET_BYTESIZE for this key type!");
 }
 
@@ -27,12 +27,17 @@ struct incremental_resize {
     }
     constexpr static void allocate([[maybe_unused]]const size_t new_size)  {
     }
+    constexpr static size_t size([[maybe_unused]]const size_t bucket, const size_t current_size) {
+        return current_size;
+    }
 
     constexpr static size_t size_after_increment([[maybe_unused]] const size_t bucket, const size_t newsize) {
         return newsize;
     }
     constexpr static bool needs_resize([[maybe_unused]] const size_t bucket, [[maybe_unused]] const size_t newsize) { return true; }
+    constexpr static void assign([[maybe_unused]] const size_t bucket, [[maybe_unused]] const size_t size) {}
 };
+
 
 class arbitrary_resize {
     public:
@@ -42,6 +47,14 @@ class arbitrary_resize {
     bucketsize_type* m_maxbucketsizes = nullptr; //! size of each bucket
     ON_DEBUG(size_t m_buckets = 0;)
 
+    /**
+     * the number of elements a buckets contains on resizing to a size of at least `newsize`
+     */
+    size_t resize(const bucketsize_type newsize) {
+        if(newsize < separate_chaining::MAX_BUCKET_BYTESIZE / 4) return newsize*2;
+        return newsize * 1.5f; // see https://github.com/facebook/folly/blob/master/folly/docs/FBVector.md
+    }
+
     public:
     arbitrary_resize() = default;
     arbitrary_resize(arbitrary_resize&& o) 
@@ -50,17 +63,20 @@ class arbitrary_resize {
         ON_DEBUG(m_buckets = std::move(o.m_buckets);)
         o.m_maxbucketsizes = nullptr;
     }
-    arbitrary_resize& operator=(arbitrary_resize&& o) 
-    {
+    arbitrary_resize& operator=(arbitrary_resize&& o) {
         m_maxbucketsizes = std::move(o.m_maxbucketsizes);
         ON_DEBUG(m_buckets = std::move(o.m_buckets);)
         o.m_maxbucketsizes = nullptr;
         return *this;
     }
-    void initiate(const size_t bucket) {
-        m_maxbucketsizes[bucket] = 1;
+    void assign(const size_t bucket, const size_t size) const {
+        DCHECK_LT(bucket, m_buckets);
+        m_maxbucketsizes[bucket] = size;
     }
-
+    size_t size(const size_t bucket, [[maybe_unused]]const size_t current_size) const {
+        DCHECK_LT(bucket, m_buckets);
+        return m_maxbucketsizes[bucket];
+    }
     size_t bucket_capacity(const size_t bucket, [[maybe_unused]] const size_t current_size) const {
         DCHECK_LT(bucket, m_buckets);
         return m_maxbucketsizes[bucket];
@@ -75,9 +91,8 @@ class arbitrary_resize {
 
     size_t size_after_increment(const size_t bucket, const bucketsize_type newsize) {
         DCHECK_LT(bucket, m_buckets);
-        constexpr float resize_factor = 2.0f;
-        DCHECK_LE(static_cast<size_t>(newsize * resize_factor),std::numeric_limits<bucketsize_type>::max());
-        return m_maxbucketsizes[bucket] = newsize * resize_factor;
+        DCHECK_LE(static_cast<size_t>(resize(newsize)),std::numeric_limits<bucketsize_type>::max());
+        return m_maxbucketsizes[bucket] = resize(newsize);
     }
     ~arbitrary_resize() {
         if(m_maxbucketsizes != nullptr) {
@@ -259,6 +274,30 @@ class separate_chaining_table {
     const uint_fast8_t m_width;
     hash_mapping_type m_hash; //! hash function
 
+    //!@see std::vector
+    void shrink_to_fit() {
+        if(m_buckets == 0) return;
+        const size_t cbucket_count = bucket_count();
+        const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
+        for(size_t bucket = 0; bucket < cbucket_count;  ++bucket) {
+            const bucketsize_type& bucket_size = m_bucketsizes[bucket];
+            if(m_resize_strategy.size(bucket, bucket_size) > bucket_size) {
+                m_keys[bucket].resize(bucket_size, bucket_size, key_bitwidth);
+                m_value_manager[bucket].resize(bucket_size, bucket_size);
+                m_resize_strategy.assign(bucket, bucket_size);
+            }
+        }
+    }
+
+    //!@see std::vector
+    size_t capacity() const {
+        const size_t cbucket_count = bucket_count();
+        size_t size = 0;
+        for(size_t bucket = 0; bucket < cbucket_count;  ++bucket) {
+            size += m_resize_strategy.size(bucket, m_bucketsizes[bucket]);
+        }
+        return size;
+    }
 
 
     void clear(const size_t bucket) { //! empties i-th bucket
@@ -383,6 +422,7 @@ class separate_chaining_table {
             statphase.log("deviation", deviation);
             statphase.log("width", m_width);
             statphase.log("max_bucket_size", max_bucket_size());
+            statphase.log("capacity", capacity());
     }
 #endif
 
@@ -408,7 +448,8 @@ class separate_chaining_table {
             tdc::StatPhase statphase(std::string("resizing to ") + std::to_string(reserve_bits));
             print_stats(statphase);
 #endif
-            for(size_t bucket = 0; bucket < 1ULL<<m_buckets; ++bucket) {
+            const size_t cbucket_count = bucket_count();
+            for(size_t bucket = 0; bucket < cbucket_count; ++bucket) {
                 if(m_bucketsizes[bucket] == 0) continue;
 
                 const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
@@ -514,11 +555,11 @@ class separate_chaining_table {
         const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
 
         if(bucket_size == 0) {
-            bucket_size = 1;
+            bucket_size = separate_chaining::INITIAL_BUCKET_SIZE;
             ON_DEBUG(bucket_plainkeys   = reinterpret_cast<key_type*>  (malloc(sizeof(key_type))));
             bucket_keys.initiate();
             bucket_values.initiate();
-            m_resize_strategy.initiate(bucket);
+            m_resize_strategy.assign(bucket, bucket_size);
         } else {
             ++bucket_size;
             ON_DEBUG(bucket_plainkeys   = reinterpret_cast<key_type*>  (realloc(bucket_plainkeys, sizeof(key_type)*bucket_size));)
@@ -529,7 +570,6 @@ class separate_chaining_table {
                 bucket_values.resize(bucket_size-1, newsize);
             }
         }
-        DCHECK_LE(m_resize_strategy.m_maxbucketsizes[bucket], 2*static_cast<size_t>(bucket_size));
         DCHECK_LE(key, max_key());
         ON_DEBUG(bucket_plainkeys[bucket_size-1] = key;)
         
@@ -543,6 +583,7 @@ class separate_chaining_table {
 
     ~separate_chaining_table() { clear(); }
 
+    /** @see std::set **/
     size_type count(const key_type& key ) const {
         return find(key) == end() ? 0 : 1;
     }
@@ -571,6 +612,9 @@ class separate_chaining_table {
     }
 
 
+    /**
+     * number of bytes the hash table uses
+     */
     size_type size_in_bytes() const {
         const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
         size_t bytes = sizeof(m_resize_strategy) * bucket_count() + sizeof(m_keys) + sizeof(m_value_manager) + sizeof(m_bucketsizes) + sizeof(m_buckets) + sizeof(m_elements) + sizeof(m_width) + sizeof(m_hash);
@@ -583,10 +627,11 @@ class separate_chaining_table {
 
 };
 
-template<class key_bucket_t, class value_bucket_t, class hash_mapping_t>
-using separate_chaining_map = separate_chaining_table<key_bucket_t, value_array_manager<value_bucket_t>, hash_mapping_t>;
+template<class key_bucket_t, class value_bucket_t, class hash_mapping_t, class resize_strategy_t = incremental_resize>
+using separate_chaining_map = separate_chaining_table<key_bucket_t, value_array_manager<value_bucket_t>, hash_mapping_t, resize_strategy_t>;
 
-template<class key_bucket_t, class hash_mapping_t> using separate_chaining_set = separate_chaining_table<key_bucket_t, value_dummy_manager, hash_mapping_t>;
+template<class key_bucket_t, class hash_mapping_t, class resize_strategy_t = incremental_resize> 
+using separate_chaining_set = separate_chaining_table<key_bucket_t, value_dummy_manager, hash_mapping_t, resize_strategy_t>;
 
 
 typename value_dummy_manager::value_bucket_type value_dummy_manager::m_bucket;
