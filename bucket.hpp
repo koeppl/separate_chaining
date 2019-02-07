@@ -6,6 +6,8 @@
 
 #include <immintrin.h>
 
+namespace separate_chaining {
+
 inline void* aligned_realloc(void*const ptr, const size_t oldsize, const size_t size, const size_t alignment) {
    DCHECK_LE(oldsize, size);
    void* newptr = _mm_malloc(size, alignment);
@@ -343,4 +345,6 @@ class varwidth_key_bucket {
         return *this;
     }
 };
+
+}//ns separate_chaining
 

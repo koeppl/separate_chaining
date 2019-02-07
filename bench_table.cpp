@@ -10,6 +10,8 @@
 #include <tudocomp/util/compact_sparse_displacement_hash.hpp>
 #include <tudocomp/util/compact_sparse_hash.hpp>
 
+using namespace separate_chaining;
+
 CELERO_MAIN
 
 template<class T>

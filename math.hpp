@@ -1,5 +1,7 @@
 #pragma once
 
+namespace separate_chaining {
+
 //! returns the most significant bit counting at 0
 constexpr int most_significant_bit(const uint64_t& x) {
     return x == 0 ? -1 : (sizeof(uint64_t)*8-1) - __builtin_clzll(x);
@@ -19,3 +21,4 @@ constexpr T ceil_div(const T& dividend, const T& divisor) {
 }
 
 
+}//ns separate_chaining

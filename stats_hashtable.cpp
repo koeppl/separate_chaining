@@ -19,6 +19,8 @@
 
 #include "/home/niki/code/prefixsearch/program/TPackedTrie/rigtorp/HashMap.h"
 
+using namespace separate_chaining;
+
 template<class T>
 T random_int(const T& maxvalue) {
    return static_cast<T>(std::rand() * (1.0 / (RAND_MAX + 1.0 )) * maxvalue);

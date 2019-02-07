@@ -2,6 +2,8 @@
 
 #include "bijective_hash.hpp"
 
+namespace separate_chaining {
+
 class SplitMix { // from http://zimbry.blogspot.com/2011/09/better-bit-mixing-improving-on.html
    public:
    uint64_t operator()(uint64_t x) const {
@@ -65,3 +67,4 @@ class xorshift_hash {
 };
 
 
+}//ns separate_chaining

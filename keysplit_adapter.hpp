@@ -6,6 +6,8 @@
 #include <algorithm>
 #include "dcheck.hpp"
 
+namespace separate_chaining {
+
 /** can be used for keys in [0 .. max-1], where max = std::numeric_limits<uint64_t>::max()
  * max_bits: maximum number of bits a key can have
  * m_length: number of hash tables to use
@@ -209,4 +211,6 @@ class keysplit_adapter64 {
       m_adapter.shrink_to_fit();
    }
 };
+
+}//ns separate_chaining
 

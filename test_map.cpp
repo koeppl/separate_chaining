@@ -6,6 +6,7 @@
 #include <algorithm>
 #include "bijective_hash.hpp"
 
+using namespace separate_chaining;
 using bijective_hash = poplar::bijective_hash::Xorshift;
 
 

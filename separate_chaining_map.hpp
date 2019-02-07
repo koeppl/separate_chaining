@@ -14,13 +14,13 @@ namespace separate_chaining {
     //static constexpr size_t MAX_BUCKET_BYTESIZE = 128;
     static constexpr size_t MAX_BUCKET_BYTESIZE = 254; //! maximum number of elements a bucket can store
     static constexpr size_t INITIAL_BUCKETS = 16; //! number of buckets a separate hash table holds initially
-    static constexpr size_t INITIAL_BUCKET_SIZE = 1; //! number of elements a bucket can store initially
     using bucketsize_type = uint8_t; //! type for storing the sizes of the buckets
     static_assert(MAX_BUCKET_BYTESIZE < std::numeric_limits<bucketsize_type>::max(), "enlarge separate_chaining::MAX_BUCKET_BYTESIZE for this key type!");
-}
 
+//! let a full bucket grow incrementally on insertion such that there is no need to store the capacity of a bucket (since it is always full)
 struct incremental_resize {
     using bucketsize_type = separate_chaining::bucketsize_type; //! used for storing the sizes of the buckets
+    static constexpr size_t INITIAL_BUCKET_SIZE = 1; //! number of elements a bucket can store initially
 
     constexpr static size_t bucket_capacity([[maybe_unused]] const size_t index, const size_t current_size) {
         return current_size;
@@ -39,9 +39,14 @@ struct incremental_resize {
 };
 
 
+/**
+ * Defines how much a full bucket grows on insertion. 
+ * Maintains the capacities of all buckets.
+ */
 class arbitrary_resize {
     public:
     using bucketsize_type = separate_chaining::bucketsize_type; //! used for storing the sizes of the buckets
+    static constexpr size_t INITIAL_BUCKET_SIZE = 1; //! number of elements a bucket can store initially
 
     //private:
     bucketsize_type* m_maxbucketsizes = nullptr; //! size of each bucket
@@ -102,10 +107,9 @@ class arbitrary_resize {
 };
 
 
-
-
-
-
+/**
+ * Iterator of a seperate hash table
+ */
 template<class hash_map>
 struct separate_chaining_iterator {
     public:
@@ -148,7 +152,7 @@ struct separate_chaining_iterator {
 };
 
 
-//! dummy class
+//! dummy class for supporting hash sets without memory overhead
 class null_value_bucket {
     bool m_true = true;
     public:
@@ -164,6 +168,7 @@ class null_value_bucket {
 };
 
 
+//! dummy class for supporting hash sets without memory overhead
 class value_dummy_manager {
     public:
     using value_bucket_type = null_value_bucket;
@@ -194,6 +199,7 @@ class value_dummy_manager {
 };
 
 
+//! Storing an array of value buckets
 template<class value_bucket_t>
 class value_array_manager {
     public:
@@ -238,7 +244,13 @@ class value_array_manager {
 
 
 
-template<class key_bucket_t, class value_manager_t, class hash_mapping_t, class resize_strategy_t = arbitrary_resize>
+/**
+ * key_bucket_t: a bucket from `bucket.hpp`
+ * value_manager_t: Either `value_dummy_manager` or `value_array_manager<value_bucket_t>`, where `value_bucket_t` is either `class_bucket_t` or `plain_bucket_t`
+ * hash_mapping_t: a hash mapping from `hash.hpp`
+ * resize_strategy_t: either `arbitrary_resize` or `incremental_resize`
+ */
+template<class key_bucket_t, class value_manager_t, class hash_mapping_t, class resize_strategy_t>
 class separate_chaining_table {
     public:
     using key_bucket_type = key_bucket_t;
@@ -306,7 +318,13 @@ class separate_chaining_table {
         ON_DEBUG(free(m_plainkeys[bucket]));
         m_bucketsizes[bucket] = 0;
     }
-    void clear_structure() {
+    
+    /**
+     * Do NOT call this function unless you know what you are doing!
+     * Assumes that all key and value buckets are no longer allocated and 
+     * that it is left to do the final clean-up.
+     */
+    void clear_structure() { 
         delete [] m_keys;
         ON_DEBUG(free(m_plainkeys));
         free(m_bucketsizes);
@@ -315,6 +333,9 @@ class separate_chaining_table {
         m_elements = 0;
     }
 
+    /**
+     * Cleans up the hash table. Sets the hash table in its initial state.
+     */
     void clear() { //! empties hash table
         if(m_bucketsizes != nullptr) {
             for(size_t bucket = 0; bucket < (1ULL<<m_buckets); ++bucket) {
@@ -341,6 +362,7 @@ class separate_chaining_table {
         return m_elements;
     }
 
+    //! the maximum number of elements that can be stored with the current number of buckets.
     size_type max_size() const noexcept {
         return max_bucket_size() * bucket_count();
     }
@@ -427,6 +449,7 @@ class separate_chaining_table {
 #endif
 
 
+    //! Allocate `reserve` buckets. Do not confuse with reserving space for `reserve` elements.
     void reserve(size_t reserve) {
         size_t reserve_bits = most_significant_bit(reserve);
         if(1ULL<<reserve_bits != reserve) ++reserve_bits;
@@ -555,7 +578,7 @@ class separate_chaining_table {
         const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
 
         if(bucket_size == 0) {
-            bucket_size = separate_chaining::INITIAL_BUCKET_SIZE;
+            bucket_size = resize_strategy_type::INITIAL_BUCKET_SIZE;
             ON_DEBUG(bucket_plainkeys   = reinterpret_cast<key_type*>  (malloc(sizeof(key_type))));
             bucket_keys.initiate();
             bucket_values.initiate();
@@ -587,6 +610,8 @@ class separate_chaining_table {
     size_type count(const key_type& key ) const {
         return find(key) == end() ? 0 : 1;
     }
+
+    //! @see std::set
     size_type erase(const key_type& key) {
         if(m_buckets == 0) return 0;
 
@@ -627,11 +652,16 @@ class separate_chaining_table {
 
 };
 
+//! typedef for hash map
 template<class key_bucket_t, class value_bucket_t, class hash_mapping_t, class resize_strategy_t = incremental_resize>
 using separate_chaining_map = separate_chaining_table<key_bucket_t, value_array_manager<value_bucket_t>, hash_mapping_t, resize_strategy_t>;
 
+//! typedef for hash set
 template<class key_bucket_t, class hash_mapping_t, class resize_strategy_t = incremental_resize> 
 using separate_chaining_set = separate_chaining_table<key_bucket_t, value_dummy_manager, hash_mapping_t, resize_strategy_t>;
 
 
 typename value_dummy_manager::value_bucket_type value_dummy_manager::m_bucket;
+
+}//ns separate_chaining
+
