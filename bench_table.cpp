@@ -2,7 +2,7 @@
 #include "lcp.hpp"
 #include "dcheck.hpp"
 
-#include "separate_chaining_map.hpp"
+#include "separate_chaining_table.hpp"
 #include <map>
 
 #include <tudocomp/util/compact_hash.hpp>

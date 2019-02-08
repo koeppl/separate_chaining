@@ -1,7 +1,7 @@
 #include <iostream>
 #include <gtest/gtest.h>
 #include <map>
-#include "separate_chaining_map.hpp"
+#include "separate_chaining_table.hpp"
 #include "keysplit_adapter.hpp"
 #include <algorithm>
 #include "bijective_hash.hpp"
@@ -66,6 +66,34 @@ void test_map_outlier(T& map) {
 }
 
 template<class T>
+void test_map_iterator(T& map) {
+   const uint64_t max_key = std::min<uint64_t>(std::numeric_limits<uint8_t>::max(), map.max_key());
+   DCHECK_LE(max_key, std::numeric_limits<typename T::value_type>::max());
+
+   for(size_t i = 0; i < max_key; ++i) {
+      map[i] = max_key-i;
+   }
+   for(size_t i = 0; i < max_key; ++i) {
+      ASSERT_EQ(map[i], max_key-i);
+      ASSERT_EQ(map[i], map[i]);
+   }
+   map.shrink_to_fit();
+   for(const auto& el : map) {
+      ASSERT_EQ(el.first, max_key - el.second);
+   }
+   for(auto it = map.begin(); it != map.end(); ++it) {
+      ASSERT_EQ(it->first, max_key - it->second);
+   }
+
+   const size_t size = map.size();
+   ASSERT_EQ(map.size(), size);
+   for(size_t i = 0; i < max_key; ++i) {
+      ASSERT_EQ(map.erase(i), 1ULL);
+   }
+   ASSERT_EQ(map.size(), 0ULL);
+}
+
+template<class T>
 void test_map_id(T& map) {
    const uint64_t max_key = std::min<uint64_t>(std::numeric_limits<uint16_t>::max(), map.max_key());
    DCHECK_LE(max_key, std::numeric_limits<typename T::value_type>::max());
@@ -84,9 +112,9 @@ void test_map_id(T& map) {
    }
    ASSERT_EQ(map.size(), size);
    for(size_t i = 0; i < max_key; ++i) {
-      ASSERT_EQ(map.erase(i),1);
+      ASSERT_EQ(map.erase(i),1ULL);
    }
-   ASSERT_EQ(map.size(), 0);
+   ASSERT_EQ(map.size(), 0ULL);
 }
 template<class T>
 void test_map_reverse(T& map) {
@@ -107,9 +135,9 @@ void test_map_reverse(T& map) {
    ASSERT_EQ(map.size(), size);
    //erase
    for(size_t i = 0; i < max_key; ++i) {
-      ASSERT_EQ(map.erase(max_key-i),1);
+      ASSERT_EQ(map.erase(max_key-i), 1ULL);
    }
-   ASSERT_EQ(map.size(), 0);
+   ASSERT_EQ(map.size(), 0ULL);
 }
 
 
@@ -132,7 +160,7 @@ void test_map_random(T& map) {
       }
       for(size_t i = 0; i < 100; ++i) {
 	 const key_type key = random_int<key_type>(max_key);
-	 const int removed_elements = rev.erase(key);
+	 const typename T::size_type removed_elements = rev.erase(key);
 	 ASSERT_EQ(map.erase(key), removed_elements);
 	 ASSERT_EQ(map.size(), rev.size());
       }
@@ -173,6 +201,7 @@ void test_map_random_large(T& map) {
 
 
 #define TEST_SMALL_MAP(x,y) \
+   TEST(x, iterator) { y; test_map_iterator(map); } \
    TEST(x, outlier) { y; test_map_outlier(map); } \
    TEST(x, random) { y; test_map_random(map); }
 
@@ -198,6 +227,7 @@ TEST_MAP(map_avx2_64_32,  separate_chaining_map<avx2_key_bucket<uint64_t> COMMA 
 TEST_MAP(map_avx2_64_Xor, separate_chaining_map<avx2_key_bucket<uint64_t> COMMA plain_key_bucket<uint32_t> COMMA xorshift_hash COMMA incremental_resize> map(32))
 
 
+TEST_MAP(map_plain_class32,  separate_chaining_map<class_key_bucket<uint32_t> COMMA class_key_bucket<uint32_t> COMMA hash_mapping_adapter<uint32_t COMMA SplitMix> COMMA incremental_resize> map)
 
 TEST_MAP(map_plain_16,  separate_chaining_map<plain_key_bucket<uint32_t> COMMA plain_key_bucket<uint16_t> COMMA hash_mapping_adapter<uint32_t COMMA SplitMix> COMMA incremental_resize> map)
 TEST_MAP(map_plain_32,  separate_chaining_map<plain_key_bucket<uint32_t> COMMA plain_key_bucket<uint32_t> COMMA hash_mapping_adapter<uint32_t COMMA SplitMix> COMMA incremental_resize> map)
@@ -213,6 +243,7 @@ TEST_MAP(map_avx2_16_arb_16,  separate_chaining_map<avx2_key_bucket<uint16_t> CO
 TEST_MAP(map_plain_arb_16,  separate_chaining_map<plain_key_bucket<uint32_t> COMMA plain_key_bucket<uint16_t> COMMA hash_mapping_adapter<uint32_t COMMA SplitMix> COMMA arbitrary_resize> map)
 TEST_MAP(map_var_arb_16,  separate_chaining_map<varwidth_key_bucket COMMA plain_key_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix> COMMA arbitrary_resize> map)
 
+TEST_SMALL_MAP(map_plain_small32,  separate_chaining_map<plain_key_bucket<uint32_t> COMMA plain_key_bucket<uint32_t> COMMA hash_mapping_adapter<uint32_t COMMA SplitMix> COMMA incremental_resize> map)
 TEST_SMALL_MAP(map_bucket_plain_arb_16,  chaining_bucket<plain_key_bucket<uint32_t> COMMA plain_key_bucket<uint16_t> COMMA arbitrary_resize_bucket> map)
 TEST_SMALL_MAP(map_bucket_var_arb_16,    chaining_bucket<varwidth_key_bucket COMMA plain_key_bucket<uint16_t> COMMA arbitrary_resize_bucket> map)
 TEST_SMALL_MAP(map_bucket_plain_16,  chaining_bucket<plain_key_bucket<uint32_t> COMMA plain_key_bucket<uint16_t> COMMA incremental_resize> map)

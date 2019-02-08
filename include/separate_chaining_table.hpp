@@ -14,51 +14,112 @@
 
 namespace separate_chaining {
 
+
 /**
  * Iterator of a seperate hash table
  */
 template<class hash_map>
-struct separate_chaining_iterator {
+struct separate_chaining_navigator {
     public:
         using key_type = typename hash_map::key_type;
         using value_type = typename hash_map::value_type;
         using pair_type = std::pair<key_type, value_type>;
         using bucketsize_type = typename hash_map::bucketsize_type;
         using size_type = typename hash_map::size_type;
+        using class_type = separate_chaining_navigator<hash_map>;
+
+        //private:
         const hash_map& m_map;
         size_type m_bucket; //! in which bucket the iterator currently is
         bucketsize_type m_position; //! at which position in the bucket
 
-        pair_type m_pair;
 
-        separate_chaining_iterator(const hash_map& map, size_t bucket, size_t position) 
+        bool invalid() const {
+            return m_bucket >= m_map.bucket_count() || m_position >= m_map.bucket_size(m_bucket);
+        }
+
+    public:
+        separate_chaining_navigator(const hash_map& map, size_t bucket, size_t position) 
             : m_map(map), m_bucket(bucket), m_position(position) {
             }
 
-        const pair_type* operator->()  {
-            if(m_bucket >= m_map.bucket_count()) {
-                m_bucket = 0;
-            }
-            if(m_position >= m_map.bucket_size(m_bucket)) {
-                m_position = 0;
-            }
-
+        const key_type& key()  const {
             const uint_fast8_t key_bitwidth = m_map.m_hash.remainder_width(m_map.m_buckets);
             const key_type read_quotient = m_map.m_keys[m_bucket].read(m_position, key_bitwidth);
             const key_type read_key = m_map.m_hash.inv_map(read_quotient, m_bucket, m_map.m_buckets);
+            return read_key;
+        }
+        const value_type& value() const {
+            return m_map.m_value_manager[m_bucket][m_position];
+        }
 
-            m_pair = std::make_pair(read_key, m_map.m_value_manager[m_bucket][m_position]);
+        class_type& operator++() { 
+            DCHECK_LT(m_bucket, m_map.bucket_count());
+            if(m_position+1 == m_map.bucket_size(m_bucket)) { 
+                m_position = 0;
+                ++m_bucket;
+                return *this;
+            } 
+            ++m_position;
+            return *this;
+        }
+
+        bool operator!=(const separate_chaining_navigator& o) const {
+            return !( (*this)  == o);
+        }
+        bool operator==(const separate_chaining_navigator& o) const {
+          if(!o.invalid() && !invalid()) return m_bucket == o.m_bucket && m_position == o.m_position; // compare positions
+          return o.invalid() == invalid();
+        }
+};
+
+/**
+ * Iterator of a seperate hash table
+ */
+template<class hash_map>
+struct separate_chaining_iterator : public separate_chaining_navigator<hash_map> {
+    public:
+        using key_type = typename hash_map::key_type;
+        using value_type = typename hash_map::value_type;
+        using pair_type = std::pair<key_type, value_type>;
+        using bucketsize_type = typename hash_map::bucketsize_type;
+        using size_type = typename hash_map::size_type;
+        using class_type = separate_chaining_iterator<hash_map>;
+        using super_type = separate_chaining_navigator<hash_map>;
+
+        pair_type m_pair;
+
+        void update() {
+            m_pair = std::make_pair(super_type::key(), super_type::value());
+        }
+
+    public:
+        separate_chaining_iterator(const hash_map& map, size_t bucket, size_t position) 
+            : super_type(map, bucket, position) {}
+
+        class_type& operator++() { 
+            super_type::operator++();
+            if(!super_type::invalid()) { update(); }
+            return *this;
+        }
+
+        const pair_type& operator*() const {
+            DCHECK(*this != super_type::m_map.end());
+            return m_pair;
+        }
+
+        const pair_type* operator->() const {
+            DCHECK(*this != super_type::m_map.end());
             return &m_pair;
         }
         bool operator!=(const separate_chaining_iterator& o) const {
             return !( (*this)  == o);
         }
         bool operator==(const separate_chaining_iterator& o) const {
-            // if(o->m_bucket == -1ULL && this->m_bucket == -1ULL) return true; // both are end()
-            // if(o->m_bucket == -1ULL || this->m_bucket == -1ULL) return false; // one is end()
-            return m_bucket == o.m_bucket && m_position == o.m_position; // compare positions
+            return super_type::operator==(o);
         }
 };
+
 
 
 //! dummy class for supporting hash sets without memory overhead
@@ -67,6 +128,9 @@ class null_value_bucket {
     public:
     using key_type = bool;
     bool& operator[](size_t)  {
+        return m_true;
+    }
+    const bool& operator[](size_t) const {
         return m_true;
     }
     constexpr void clear() {}
@@ -178,6 +242,7 @@ class separate_chaining_table {
     using size_type = uint64_t; //! used for addressing the i-th bucket
     using class_type = separate_chaining_table<key_bucket_type, value_manager_type, hash_mapping_type, resize_strategy_type>;
     using iterator = separate_chaining_iterator<class_type>;
+    using navigator = separate_chaining_navigator<class_type>;
 
 
     resize_strategy_type m_resize_strategy;
@@ -300,7 +365,8 @@ class separate_chaining_table {
     }
 
     separate_chaining_table(separate_chaining_table&& other)
-       : m_keys(std::move(other.m_keys))
+       : m_width(other.width)
+       , m_keys(std::move(other.m_keys))
        , m_value_manager(std::move(other.m_value_manager))
        , m_bucketsizes(std::move(other.m_bucketsizes))
        , m_buckets(std::move(other.m_buckets))
@@ -309,11 +375,12 @@ class separate_chaining_table {
        , m_resize_strategy(std::move(other.m_resize_strategy))
     {
 
-        ON_DEBUG(m_plainkeys = std::move(other.m_plainkeys));
+        ON_DEBUG(m_plainkeys = std::move(other.m_plainkeys); other.m_plainkeys = nullptr;)
         other.m_bucketsizes = nullptr; //! a hash map without buckets is already deleted
     }
 
     separate_chaining_table& operator=(separate_chaining_table&& other) {
+        DCHECK_EQ(m_width, other.m_width);
         clear();
         m_keys        = std::move(other.m_keys);
         m_value_manager      = std::move(other.m_value_manager);
@@ -322,7 +389,7 @@ class separate_chaining_table {
         m_hash        = std::move(other.m_hash);
         m_elements    = std::move(other.m_elements);
         m_resize_strategy = std::move(other.m_resize_strategy);
-        ON_DEBUG(m_plainkeys = std::move(other.m_plainkeys));
+        ON_DEBUG(m_plainkeys = std::move(other.m_plainkeys); other.m_plainkeys = nullptr;)
         other.m_bucketsizes = nullptr; //! a hash map without buckets is already deleted
         return *this;
     }
@@ -390,7 +457,7 @@ class separate_chaining_table {
                     const key_type read_quotient = bucket_keys_it.read(i, key_bitwidth);
                     const key_type read_key = m_hash.inv_map(read_quotient, bucket, m_buckets);
                     DCHECK_EQ(read_key, m_plainkeys[bucket][i]);
-                    tmp_map[read_key] =  m_value_manager[bucket][i];
+                    tmp_map[read_key] =  std::move(m_value_manager[bucket][i]);
                 }
                 clear(bucket);
                 //TODO: add free to save memory
@@ -400,8 +467,23 @@ class separate_chaining_table {
         }
     }
 
+    const iterator cend() const {
+        return iterator { *this, -1ULL, -1ULL };
+    }
     const iterator end() const {
         return iterator { *this, -1ULL, -1ULL };
+    }
+    const iterator begin() const {
+        return iterator { *this, 0, 0 };
+    }
+    const iterator cbegin() const {
+        return iterator { *this, 0, 0 };
+    }
+    const navigator begin_nav() const {
+        return navigator { *this, 0, 0 };
+    }
+    const navigator end_nav() const {
+        return navigator { *this, -1ULL, -1ULL };
     }
 
     iterator find(const key_type& key) const {

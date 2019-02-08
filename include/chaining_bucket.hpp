@@ -54,19 +54,38 @@ template<class hash_map>
         using value_type = typename hash_map::value_type;
         using pair_type = std::pair<key_type, value_type>;
         using bucketsize_type = typename hash_map::bucketsize_type;
+        using class_type = chaining_bucket_iterator<hash_map>;
+
+        //private:
         const hash_map& m_map;
         bucketsize_type m_position;
-
         pair_type m_pair;
 
-        chaining_bucket_iterator(const hash_map& map, const bucketsize_type position) 
-            : m_map(map), m_position(position) {
-            }
 
-        const pair_type* operator->()  {
+        void update() {
             DCHECK_LT(m_position, m_map.size());
             const key_type read_key = m_map.m_keys.read(m_position, m_map.key_bit_width());
             m_pair = std::make_pair(read_key, m_map.m_values[m_position]);
+        }
+
+    public:
+        chaining_bucket_iterator(const hash_map& map, const bucketsize_type position) 
+            : m_map(map), m_position(position) {
+                if(!invalid()) { update(); }
+            }
+
+        class_type& operator++() { 
+            DCHECK_LT(m_position, m_map.size());
+            ++m_position;
+            if(m_position < m_map.size()) { update(); }
+            return *this;
+        }
+
+        const pair_type& operator*() const {
+            return m_pair;
+        }
+
+        const pair_type* operator->() const {
             return &m_pair;
         }
         bool operator!=(const chaining_bucket_iterator& o) const {
@@ -163,24 +182,26 @@ class chaining_bucket {
     }
 
     chaining_bucket(chaining_bucket&& other)
-       : m_keys(std::move(other.m_keys))
+       : m_width(other.width)
+       , m_keys(std::move(other.m_keys))
        , m_values(std::move(other.m_values))
        , m_elements(std::move(other.m_elements))
        , m_resize_strategy(std::move(other.m_resize_strategy))
     {
 
-        ON_DEBUG(m_plainkeys = std::move(other.m_plainkeys));
+        ON_DEBUG(m_plainkeys = std::move(other.m_plainkeys); other.m_plainkeys = nullptr;)
         other.m_elements = 0; 
     }
 
     chaining_bucket& operator=(chaining_bucket&& other) {
+        DCHECK_EQ(m_width, other.m_width);
         clear();
         m_keys        = std::move(other.m_keys);
         m_values      = std::move(other.m_values);
         m_elements    = std::move(other.m_elements);
         m_resize_strategy = std::move(other.m_resize_strategy);
-        ON_DEBUG(m_plainkeys = std::move(other.m_plainkeys));
-        other.m_bucketsizes = nullptr; //! a hash map without buckets is already deleted
+        ON_DEBUG(m_plainkeys = std::move(other.m_plainkeys); other.m_plainkeys = nullptr;)
+        other.m_elements  = 0;
         return *this;
     }
     void swap(chaining_bucket& other) {
@@ -205,6 +226,15 @@ class chaining_bucket {
 
     const iterator end() const {
         return iterator { *this, static_cast<bucketsize_type>(-1ULL) };
+    }
+    const iterator cend() const {
+        return iterator { *this, static_cast<bucketsize_type>(-1ULL) };
+    }
+    const iterator begin() const {
+        return iterator { *this, static_cast<bucketsize_type>(0) };
+    }
+    const iterator cbegin() const {
+        return iterator { *this, static_cast<bucketsize_type>(0) };
     }
 
     iterator find(const key_type& key) const {
@@ -236,6 +266,15 @@ class chaining_bucket {
         }
 #endif//NDEBUG
         return position;
+    }
+
+    const value_type& operator[](const key_type& key) const {
+        DCHECK_LE(key, max_key());
+        DCHECK(m_keys.initialized());
+        const size_t position = locate(key);
+        DCHECK(position != static_cast<bucketsize_type>(-1ULL));
+        DCHECK_LT(position, m_elements);
+        return m_values[position];
     }
 
     value_type& operator[](const key_type& key) {

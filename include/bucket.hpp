@@ -79,6 +79,7 @@ class avx2_key_bucket {
     avx2_key_bucket() = default;
 
     void initiate(const size_t size) {
+       DCHECK(m_keys == nullptr);
         m_keys = reinterpret_cast<key_type*>  (_mm_malloc(sizeof(key_type)*size, m_alignment));
         ON_DEBUG(m_length = size;)
     }
@@ -130,12 +131,14 @@ class avx2_key_bucket {
         : m_keys(std::move(other.m_keys))
     {
         other.m_keys = nullptr;
+        ON_DEBUG(m_length = other.m_length; other.m_length = 0;)
     }
 
     avx2_key_bucket& operator=(avx2_key_bucket&& other) {
         clear();
         m_keys = std::move(other.m_keys);
         other.m_keys = nullptr;
+        ON_DEBUG(m_length = other.m_length; other.m_length = 0;)
         return *this;
     }
 
@@ -178,6 +181,7 @@ class plain_key_bucket {
     }
 
     void initiate(const size_t size) {
+       DCHECK(m_keys == nullptr);
         m_keys = reinterpret_cast<key_type*>  (malloc(sizeof(key_type)*size));
         ON_DEBUG(m_length = size;)
     }
@@ -208,6 +212,7 @@ class plain_key_bucket {
         : m_keys(std::move(other.m_keys))
     {
         other.m_keys = nullptr;
+        ON_DEBUG(m_length = other.m_keys; other.m_keys = 0;)
     }
     plain_key_bucket(key_type*&& keys) 
         : m_keys(std::move(keys))
@@ -219,45 +224,42 @@ class plain_key_bucket {
         clear();
         m_keys = std::move(other.m_keys);
         other.m_keys = nullptr;
+        ON_DEBUG(m_length = other.m_length; other.m_length = 0;)
         return *this;
     }
 };
 
-template<class key_t, class allocator_t>
+template<class key_t>
 class class_key_bucket : public plain_key_bucket<key_t> {
     public:
     using key_type = typename plain_key_bucket<key_t>::key_type;
     using super_class = plain_key_bucket<key_t>;
-    using allocator_type = allocator_t;
-
-    private:
-    allocator_type allocator;
-    ON_DEBUG(size_t m_length;)
 
     public:
 
-    void clear() override {
+    void clear() {
         if(super_class::m_keys != nullptr) {
-            allocator.deallocate(super_class::m_keys);
+           delete [] super_class::m_keys;
         }
         super_class::m_keys = nullptr;
     }
 
     class_key_bucket() = default;
 
-    void initiate(const size_t size) override {
-        super_class::m_keys = allocator.template allocate<key_type>(size);
-        ON_DEBUG(m_length = size;)
+    void initiate(const size_t size) {
+       DCHECK(super_class::m_keys == nullptr);
+       super_class::m_keys = new key_type[size];
+       ON_DEBUG(super_class::m_length = size);
     }
 
-    void resize([[maybe_unused]] const size_t oldsize, const size_t size, [[maybe_unused]] const size_t width)  override {
-        key_type* keys = allocator.template allocate<key_type>(size);
-        for(size_t i = 0; i < size-1; ++i) {
+    void resize(const size_t oldsize, const size_t size, [[maybe_unused]] const size_t width = 0)  {
+       key_type* keys = new key_type[size];
+        for(size_t i = 0; i < oldsize; ++i) {
             keys[i] = std::move(super_class::m_keys[i]);
         }
-        allocator.deallocate(super_class::m_keys);
+        delete [] super_class::m_keys;
         super_class::m_keys = keys;
-        ON_DEBUG(m_length = size;)
+       ON_DEBUG(super_class::m_length = size);
     }
 
     ~class_key_bucket() { clear(); }
@@ -266,12 +268,14 @@ class class_key_bucket : public plain_key_bucket<key_t> {
         : super_class(std::move(other.super_class::m_keys))
     {
         other.super_class::m_keys = nullptr;
+        ON_DEBUG(super_class::m_length = other.m_length; other.m_length = 0;)
     }
 
     class_key_bucket& operator=(class_key_bucket&& other) {
         clear();
         super_class::m_keys = std::move(other.m_keys);
         other.m_keys = nullptr;
+        ON_DEBUG(super_class::m_length = other.m_length; other.m_length = 0;)
         return *this;
     }
 
@@ -297,6 +301,7 @@ class varwidth_key_bucket {
     varwidth_key_bucket() = default;
 
     void initiate(const size_t size) {
+       DCHECK(m_keys == nullptr);
         m_keys = reinterpret_cast<key_type*>  (malloc(sizeof(key_type)*size));
         ON_DEBUG(m_length = size;)
     }
@@ -341,12 +346,14 @@ class varwidth_key_bucket {
         : m_keys(std::move(other.m_keys))
     {
         other.m_keys = nullptr;
+        ON_DEBUG(m_length = other.m_length; other.m_length = 0;)
     }
 
     varwidth_key_bucket& operator=(varwidth_key_bucket&& other) {
         clear();
         m_keys = std::move(other.m_keys);
         other.m_keys = nullptr;
+        ON_DEBUG(m_length = other.m_length; other.m_length = 0;)
         return *this;
     }
 };

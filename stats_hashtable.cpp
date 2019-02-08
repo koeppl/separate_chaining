@@ -10,7 +10,7 @@
 #include <unordered_map>
 #include <map>
 
-#include "separate_chaining_map.hpp"
+#include "separate_chaining_table.hpp"
 #include "keysplit_adapter.hpp"
 #include <tudocomp/util/compact_hash.hpp>
 #include <tudocomp/util/compact_displacement_hash.hpp>
