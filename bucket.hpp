@@ -68,6 +68,7 @@ class avx2_key_bucket {
     ON_DEBUG(size_t m_length;)
 
     public:
+    bool initialized() const { return m_keys != nullptr; } //!check whether we can add elements to the bucket
     void clear() {
         if(m_keys != nullptr) {
             _mm_free(m_keys);
@@ -77,9 +78,9 @@ class avx2_key_bucket {
 
     avx2_key_bucket() = default;
 
-    void initiate() {
-        m_keys = reinterpret_cast<key_type*>  (_mm_malloc(sizeof(key_type), m_alignment));
-        ON_DEBUG(m_length = 1;)
+    void initiate(const size_t size) {
+        m_keys = reinterpret_cast<key_type*>  (_mm_malloc(sizeof(key_type)*size, m_alignment));
+        ON_DEBUG(m_length = size;)
     }
 
 
@@ -155,6 +156,9 @@ class plain_key_bucket {
     ON_DEBUG(size_t m_length;)
 
     public:
+
+    bool initialized() const { return m_keys != nullptr; } //!check whether we can add elements to the bucket
+
     void clear() {
         if(m_keys != nullptr) {
             free(m_keys);
@@ -173,9 +177,9 @@ class plain_key_bucket {
         return m_keys[index];
     }
 
-    void initiate() {
-        m_keys = reinterpret_cast<key_type*>  (malloc(sizeof(key_type)));
-        ON_DEBUG(m_length = 1;)
+    void initiate(const size_t size) {
+        m_keys = reinterpret_cast<key_type*>  (malloc(sizeof(key_type)*size));
+        ON_DEBUG(m_length = size;)
     }
 
     void resize([[maybe_unused]] const size_t oldsize, const size_t size, [[maybe_unused]] const size_t width = 0) {
@@ -241,9 +245,9 @@ class class_key_bucket : public plain_key_bucket<key_t> {
 
     class_key_bucket() = default;
 
-    void initiate() override {
-        super_class::m_keys = allocator.template allocate<key_type>(1);
-        ON_DEBUG(m_length = 1;)
+    void initiate(const size_t size) override {
+        super_class::m_keys = allocator.template allocate<key_type>(size);
+        ON_DEBUG(m_length = size;)
     }
 
     void resize([[maybe_unused]] const size_t oldsize, const size_t size, [[maybe_unused]] const size_t width)  override {
@@ -282,6 +286,7 @@ class varwidth_key_bucket {
     ON_DEBUG(size_t m_length;)
 
     public:
+    bool initialized() const { return m_keys != nullptr; } //!check whether we can add elements to the bucket
     void clear() {
         if(m_keys != nullptr) {
             free(m_keys);
@@ -291,9 +296,9 @@ class varwidth_key_bucket {
 
     varwidth_key_bucket() = default;
 
-    void initiate() {
-        m_keys = reinterpret_cast<key_type*>  (malloc(sizeof(key_type)));
-        ON_DEBUG(m_length = 1;)
+    void initiate(const size_t size) {
+        m_keys = reinterpret_cast<key_type*>  (malloc(sizeof(key_type)*size));
+        ON_DEBUG(m_length = size;)
     }
 
     void resize(const size_t oldsize, const size_t size, const size_t width) {

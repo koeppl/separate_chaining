@@ -37,6 +37,10 @@ endif()
 if(NO_CELERO EQUAL 0)
 	add_executable(bench_table bench_table.cpp)
 	target_link_libraries(bench_table ${CELERO_LIB} glog)
+
+	add_executable(bench_smalltable bench_smalltable.cpp)
+	target_link_libraries(bench_smalltable ${CELERO_LIB} glog)
+
 	#target_link_libraries(bench_table ${CELERO_LIB})
 endif()
 

@@ -6,106 +6,13 @@
 #include "dcheck.hpp"
 #include "hash.hpp"
 #include "bucket.hpp"
+#include "size.hpp"
 #if STATS_ENABLED
 #include <tudocomp_stat/StatPhase.hpp>
 #endif
 
+
 namespace separate_chaining {
-    //static constexpr size_t MAX_BUCKET_BYTESIZE = 128;
-    static constexpr size_t MAX_BUCKET_BYTESIZE = 254; //! maximum number of elements a bucket can store
-    static constexpr size_t INITIAL_BUCKETS = 16; //! number of buckets a separate hash table holds initially
-    using bucketsize_type = uint8_t; //! type for storing the sizes of the buckets
-    static_assert(MAX_BUCKET_BYTESIZE < std::numeric_limits<bucketsize_type>::max(), "enlarge separate_chaining::MAX_BUCKET_BYTESIZE for this key type!");
-
-//! let a full bucket grow incrementally on insertion such that there is no need to store the capacity of a bucket (since it is always full)
-struct incremental_resize {
-    using bucketsize_type = separate_chaining::bucketsize_type; //! used for storing the sizes of the buckets
-    static constexpr size_t INITIAL_BUCKET_SIZE = 1; //! number of elements a bucket can store initially
-
-    constexpr static size_t bucket_capacity([[maybe_unused]] const size_t index, const size_t current_size) {
-        return current_size;
-    }
-    constexpr static void allocate([[maybe_unused]]const size_t new_size)  {
-    }
-    constexpr static size_t size([[maybe_unused]]const size_t bucket, const size_t current_size) {
-        return current_size;
-    }
-
-    constexpr static size_t size_after_increment([[maybe_unused]] const size_t bucket, const size_t newsize) {
-        return newsize;
-    }
-    constexpr static bool needs_resize([[maybe_unused]] const size_t bucket, [[maybe_unused]] const size_t newsize) { return true; }
-    constexpr static void assign([[maybe_unused]] const size_t bucket, [[maybe_unused]] const size_t size) {}
-};
-
-
-/**
- * Defines how much a full bucket grows on insertion. 
- * Maintains the capacities of all buckets.
- */
-class arbitrary_resize {
-    public:
-    using bucketsize_type = separate_chaining::bucketsize_type; //! used for storing the sizes of the buckets
-    static constexpr size_t INITIAL_BUCKET_SIZE = 1; //! number of elements a bucket can store initially
-
-    //private:
-    bucketsize_type* m_maxbucketsizes = nullptr; //! size of each bucket
-    ON_DEBUG(size_t m_buckets = 0;)
-
-    /**
-     * the number of elements a buckets contains on resizing to a size of at least `newsize`
-     */
-    size_t resize(const bucketsize_type newsize) {
-        if(newsize < separate_chaining::MAX_BUCKET_BYTESIZE / 4) return newsize*2;
-        return newsize * 1.5f; // see https://github.com/facebook/folly/blob/master/folly/docs/FBVector.md
-    }
-
-    public:
-    arbitrary_resize() = default;
-    arbitrary_resize(arbitrary_resize&& o) 
-        : m_maxbucketsizes(std::move(o.m_maxbucketsizes))
-    {
-        ON_DEBUG(m_buckets = std::move(o.m_buckets);)
-        o.m_maxbucketsizes = nullptr;
-    }
-    arbitrary_resize& operator=(arbitrary_resize&& o) {
-        m_maxbucketsizes = std::move(o.m_maxbucketsizes);
-        ON_DEBUG(m_buckets = std::move(o.m_buckets);)
-        o.m_maxbucketsizes = nullptr;
-        return *this;
-    }
-    void assign(const size_t bucket, const size_t size) const {
-        DCHECK_LT(bucket, m_buckets);
-        m_maxbucketsizes[bucket] = size;
-    }
-    size_t size(const size_t bucket, [[maybe_unused]]const size_t current_size) const {
-        DCHECK_LT(bucket, m_buckets);
-        return m_maxbucketsizes[bucket];
-    }
-    size_t bucket_capacity(const size_t bucket, [[maybe_unused]] const size_t current_size) const {
-        DCHECK_LT(bucket, m_buckets);
-        return m_maxbucketsizes[bucket];
-    }
-    void allocate(const size_t new_size)  {
-        m_maxbucketsizes  = reinterpret_cast<bucketsize_type*>  (malloc(new_size*sizeof(bucketsize_type)));
-        ON_DEBUG(m_buckets = new_size;)
-    }
-    bool needs_resize(const size_t bucket, const bucketsize_type newsize) const {
-        return m_maxbucketsizes[bucket] <= newsize;
-    }
-
-    size_t size_after_increment(const size_t bucket, const bucketsize_type newsize) {
-        DCHECK_LT(bucket, m_buckets);
-        DCHECK_LE(static_cast<size_t>(resize(newsize)),std::numeric_limits<bucketsize_type>::max());
-        return m_maxbucketsizes[bucket] = resize(newsize);
-    }
-    ~arbitrary_resize() {
-        if(m_maxbucketsizes != nullptr) {
-            free(m_maxbucketsizes);
-        }
-    }
-};
-
 
 /**
  * Iterator of a seperate hash table
@@ -116,9 +23,11 @@ struct separate_chaining_iterator {
         using key_type = typename hash_map::key_type;
         using value_type = typename hash_map::value_type;
         using pair_type = std::pair<key_type, value_type>;
+        using bucketsize_type = typename hash_map::bucketsize_type;
+        using size_type = typename hash_map::size_type;
         const hash_map& m_map;
-        size_t m_bucket;
-        size_t m_position;
+        size_type m_bucket; //! in which bucket the iterator currently is
+        bucketsize_type m_position; //! at which position in the bucket
 
         pair_type m_pair;
 
@@ -141,10 +50,10 @@ struct separate_chaining_iterator {
             m_pair = std::make_pair(read_key, m_map.m_value_manager[m_bucket][m_position]);
             return &m_pair;
         }
-        bool operator!=(const separate_chaining_iterator o) const {
+        bool operator!=(const separate_chaining_iterator& o) const {
             return !( (*this)  == o);
         }
-        bool operator==(const separate_chaining_iterator o) const {
+        bool operator==(const separate_chaining_iterator& o) const {
             // if(o->m_bucket == -1ULL && this->m_bucket == -1ULL) return true; // both are end()
             // if(o->m_bucket == -1ULL || this->m_bucket == -1ULL) return false; // one is end()
             return m_bucket == o.m_bucket && m_position == o.m_position; // compare positions
@@ -161,7 +70,7 @@ class null_value_bucket {
         return m_true;
     }
     constexpr void clear() {}
-    constexpr void initiate() {}
+    constexpr void initiate(size_t) {}
     constexpr void resize([[maybe_unused]] const size_t oldsize, [[maybe_unused]] const size_t size) {}
     null_value_bucket(null_value_bucket&&) {}
     null_value_bucket() = default;
@@ -293,10 +202,10 @@ class separate_chaining_table {
         const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
         for(size_t bucket = 0; bucket < cbucket_count;  ++bucket) {
             const bucketsize_type& bucket_size = m_bucketsizes[bucket];
-            if(m_resize_strategy.size(bucket, bucket_size) > bucket_size) {
+            if(m_resize_strategy.size(bucket_size, bucket) > bucket_size) { //TODO: use >=!
                 m_keys[bucket].resize(bucket_size, bucket_size, key_bitwidth);
                 m_value_manager[bucket].resize(bucket_size, bucket_size);
-                m_resize_strategy.assign(bucket, bucket_size);
+                m_resize_strategy.assign(bucket_size, bucket);
             }
         }
     }
@@ -306,7 +215,7 @@ class separate_chaining_table {
         const size_t cbucket_count = bucket_count();
         size_t size = 0;
         for(size_t bucket = 0; bucket < cbucket_count;  ++bucket) {
-            size += m_resize_strategy.size(bucket, m_bucketsizes[bucket]);
+            size += m_resize_strategy.size(m_bucketsizes[bucket], bucket);
         }
         return size;
     }
@@ -513,27 +422,30 @@ class separate_chaining_table {
         bucketsize_type& bucket_size = m_bucketsizes[bucket];
         key_bucket_type& bucket_keys = m_keys[bucket];
 
-        ON_DEBUG(
-                key_type*& bucket_plainkeys = m_plainkeys[bucket];
-                bucketsize_type plain_position = static_cast<bucketsize_type>(-1ULL);
-                for(size_t i = 0; i < bucket_size; ++i) { 
-                    const key_type read_quotient = bucket_keys.read(i, key_bitwidth);
-                    ON_DEBUG(const key_type read_key = m_hash.inv_map(read_quotient, bucket, m_buckets);)
-                    DCHECK_EQ(read_key , bucket_plainkeys[i]);
-                    if(read_quotient  == quotient) {
-                        plain_position = i;
-                        break;
-                    }
-                }
-        )
+#ifndef NDEBUG
+        key_type*& bucket_plainkeys = m_plainkeys[bucket];
+        bucketsize_type plain_position = static_cast<bucketsize_type>(-1ULL);
+        for(size_t i = 0; i < bucket_size; ++i) { 
+            const key_type read_quotient = bucket_keys.read(i, key_bitwidth);
+            ON_DEBUG(const key_type read_key = m_hash.inv_map(read_quotient, bucket, m_buckets);)
+                DCHECK_EQ(read_key , bucket_plainkeys[i]);
+            if(read_quotient  == quotient) {
+                plain_position = i;
+                break;
+            }
+        }
+#endif//NDEBUG
         
         const bucketsize_type position = static_cast<bucketsize_type>(bucket_keys.find(quotient, bucket_size, key_bitwidth));
+
+#ifndef NDEBUG
         DCHECK_EQ(position, plain_position);
         if(position != static_cast<bucketsize_type>(-1ULL)) {
             DCHECK_LT(position, bucket_size);
             return position;
         }
-        return static_cast<bucketsize_type>(-1ULL);
+#endif//NDEBUG
+        return position;
     }
 
     /*
@@ -578,17 +490,17 @@ class separate_chaining_table {
         const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
 
         if(bucket_size == 0) {
-            bucket_size = resize_strategy_type::INITIAL_BUCKET_SIZE;
+            bucket_size = 1;
             ON_DEBUG(bucket_plainkeys   = reinterpret_cast<key_type*>  (malloc(sizeof(key_type))));
-            bucket_keys.initiate();
-            bucket_values.initiate();
-            m_resize_strategy.assign(bucket, bucket_size);
+            bucket_keys.initiate(resize_strategy_type::INITIAL_BUCKET_SIZE);
+            bucket_values.initiate(resize_strategy_type::INITIAL_BUCKET_SIZE);
+            m_resize_strategy.assign(resize_strategy_type::INITIAL_BUCKET_SIZE, bucket);
         } else {
             ++bucket_size;
             ON_DEBUG(bucket_plainkeys   = reinterpret_cast<key_type*>  (realloc(bucket_plainkeys, sizeof(key_type)*bucket_size));)
 
-            if(m_resize_strategy.needs_resize(bucket, bucket_size)) {
-                const size_t newsize = m_resize_strategy.size_after_increment(bucket, bucket_size);
+            if(m_resize_strategy.needs_resize(bucket_size, bucket)) {
+                const size_t newsize = m_resize_strategy.size_after_increment(bucket_size, bucket);
                 bucket_keys.resize(bucket_size-1, newsize, key_bitwidth);
                 bucket_values.resize(bucket_size-1, newsize);
             }
@@ -651,6 +563,8 @@ class separate_chaining_table {
     }
 
 };
+
+
 
 //! typedef for hash map
 template<class key_bucket_t, class value_bucket_t, class hash_mapping_t, class resize_strategy_t = incremental_resize>

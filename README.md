@@ -63,6 +63,11 @@ However, since `xorshift_hash` does not work with integers having a bit width of
 there is also a class `keysplit_adapter64<map_type, large_map_type, m_length>` that wraps around `keysplit_adapter<map_type, 63, m_length>`.
 This class uses the map `large_map_type` for storing keys with bit width 64.
 
+## Chaining Bucket
+
+For small data sets (< 100 elements), it is faster and more memory efficient to use a single bucket without hashing by relying on large caches during the linear scanning process.
+The class `chaining_bucket` wraps a single bucket in a map/set interface. 
+
 
 ## Implementation Details
 
