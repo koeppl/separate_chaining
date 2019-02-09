@@ -26,6 +26,7 @@ class keysplit_adapter {
    using value_type = typename map_type::value_type;
    using key_type = typename map_type::key_type;
    using iterator = typename map_type::iterator;
+   using const_iterator = typename map_type::const_iterator;
    using size_type = typename map_type::size_type;
 
     //! returns the maximum value of a key that can be stored
@@ -75,6 +76,9 @@ class keysplit_adapter {
     const iterator end() const {
         return m_maps[0]->end();
     }
+    const const_iterator cend() const {
+        return m_maps[0]->cend();
+    }
 
     size_type erase(const key_type& key) {
        const uint_fast8_t key_bit_width = bit_width(key);
@@ -83,7 +87,7 @@ class keysplit_adapter {
        return m_maps[slot]->erase(key);
     }
 
-    iterator find(const key_type& key) const {
+    const_iterator find(const key_type& key) const {
        const uint_fast8_t key_bit_width = bit_width(key);
        const uint_fast8_t slot = key_bit_width == 0 ? 0 : (key_bit_width-1)/m_interval;
        DCHECK_LT(slot, m_length);
@@ -140,6 +144,9 @@ class keysplit_adapter64 {
            if(o.m_end == true && m_end == true) return true;
            if(o.m_end != m_end) return false;
            return m_pair == o.m_pair;
+        }
+        bool operator!=(const dummy_iterator o) const {
+           return !(operator==(o));
         }
    };
 
@@ -198,7 +205,7 @@ class keysplit_adapter64 {
           return dummy_iterator {std::make_pair(it->first, it->second) };
        } else {
           auto it = m_large_map.find(key);
-          if(it == m_large_map.end()) return end();
+          if(it == m_large_map.cend()) return end();
           return dummy_iterator {std::make_pair(it->first, it->second)};
        }
     }

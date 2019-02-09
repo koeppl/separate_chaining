@@ -23,6 +23,7 @@ struct incremental_resize {
     }
     constexpr static bool needs_resize([[maybe_unused]] const size_t newsize, [[maybe_unused]] const size_t bucket = 0) { return true; }
     constexpr static void assign([[maybe_unused]] const size_t size, [[maybe_unused]] const size_t bucket = 0) {}
+    constexpr static void clear() {}
 };
 
 
@@ -63,7 +64,9 @@ class arbitrary_resize {
         return m_maxbucketsizes[bucket];
     }
     void allocate(const size_t new_size)  {
+        DCHECK(m_maxbucketsizes == nullptr);
         m_maxbucketsizes  = reinterpret_cast<bucketsize_type*>  (malloc(new_size*sizeof(bucketsize_type)));
+        std::fill(m_maxbucketsizes, m_maxbucketsizes+new_size, static_cast<bucketsize_type>(0));
         ON_DEBUG(m_buckets = new_size;)
     }
     bool needs_resize(const bucketsize_type newsize, const size_t bucket) const {
@@ -75,10 +78,15 @@ class arbitrary_resize {
         DCHECK_LE(static_cast<size_t>(resize(newsize)),std::numeric_limits<bucketsize_type>::max());
         return m_maxbucketsizes[bucket] = resize(newsize);
     }
-    ~arbitrary_resize() {
+    void clear() {
         if(m_maxbucketsizes != nullptr) {
             free(m_maxbucketsizes);
+            m_maxbucketsizes = nullptr;
         }
+    }
+
+    ~arbitrary_resize() {
+        clear();
     }
     /**
      * the number of elements a buckets contains on resizing to a size of at least `newsize`

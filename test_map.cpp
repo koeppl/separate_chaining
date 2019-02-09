@@ -20,49 +20,33 @@ T random_int(const T& maxvalue) {
 
 
 template<class T>
-void test_set_random(T& set) {
-   using key_type = typename T::key_type;
-   const uint64_t max_key = set.max_key();
-   for(size_t reps = 0; reps < 1000; ++reps) {
-
-      set.clear();
-      std::set<typename T::key_type> rev;
-      for(size_t i = 0; i < 1000; ++i) {
-	 const key_type key = random_int<key_type>(max_key);
-	 rev.insert(key); 
-	 set[key];
-	 ASSERT_EQ(set.size(), rev.size());
-      }
-      for(auto el : rev) {
-	 ASSERT_NE( set.find(el), set.end());
-      }
-      for(size_t i = 0; i < 1000; ++i) {
-	 const key_type key = random_int<key_type>(max_key);
-	 if(rev.find(key) == rev.end()) {
-	    ASSERT_EQ(set.find(key), set.end());
-	 } else {
-	    ASSERT_NE(set.find(key), set.end());
-	 }
-      }
-   }
-}
-TEST(set_plain_32, random) { 
-   separate_chaining_set<plain_key_bucket<uint32_t> COMMA hash_mapping_adapter<uint32_t COMMA SplitMix>> set;
-   test_set_random(set);
-} 
-
-template<class T>
 void test_map_outlier(T& map) {
    const uint_fast8_t max_bits = map.key_bit_width();
    for(size_t i = 0; i < max_bits; ++i) {
       map[1ULL<<i] = i;
       ASSERT_EQ(map.size(), i+1);
    }
+   for(size_t i = 0; i < max_bits; ++i) { //idempotent
+      map[1ULL<<i] = i;
+      ASSERT_EQ(map.size(), max_bits);
+   }
    map[map.max_key()] = max_bits;
    for(size_t i = 0; i < max_bits; ++i) {
       ASSERT_EQ(map[1ULL<<i], i);
    }
    ASSERT_EQ(map[map.max_key()], max_bits);
+   ASSERT_EQ(map.erase(map.max_key()), 1ULL);
+   for(size_t i = 0; i < max_bits; ++i) {
+      ASSERT_EQ(map.erase(1ULL<<i), 1ULL);
+   }
+   ASSERT_EQ(map.size(), 0ULL);
+   for(size_t i = 0; i < max_bits; ++i) { //refill
+      map[1ULL<<i] = i;
+      ASSERT_EQ(map.size(), i+1);
+   }
+   for(size_t i = 0; i < max_bits; ++i) {
+      ASSERT_EQ(map[1ULL<<i], i);
+   }
 }
 
 template<class T>
@@ -165,7 +149,9 @@ void test_map_random(T& map) {
 	 ASSERT_EQ(map.size(), rev.size());
       }
       for(auto el : rev) {
-	 ASSERT_EQ( map.find(el.first)->second, el.second);
+	 auto it = map.find(el.first);
+	 ASSERT_NE(it, map.end());
+	 ASSERT_EQ( it->second, el.second);
       }
       for(size_t i = 0; i < 100; ++i) {
 	 const key_type key = random_int<key_type>(max_key);
@@ -212,6 +198,7 @@ void test_map_random_large(T& map) {
    TEST(x, random) { y; test_map_random(map); } \
    TEST(x, random_large) { y; test_map_random_large(map); }
 
+TEST_MAP(bmap_avx2_16_arb_16,  separate_chaining_map<avx2_key_bucket<uint16_t> COMMA plain_key_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix> COMMA arbitrary_resize> map)
 
 
 
@@ -276,6 +263,38 @@ TEST(separate_chaining_map, step) {
 
 }
 
+
+template<class T>
+void test_set_random(T& set) {
+   using key_type = typename T::key_type;
+   const uint64_t max_key = set.max_key();
+   for(size_t reps = 0; reps < 1000; ++reps) {
+
+      set.clear();
+      std::set<typename T::key_type> rev;
+      for(size_t i = 0; i < 1000; ++i) {
+	 const key_type key = random_int<key_type>(max_key);
+	 rev.insert(key); 
+	 set[key];
+	 ASSERT_EQ(set.size(), rev.size());
+      }
+      for(auto el : rev) {
+	 ASSERT_NE( set.find(el), set.end());
+      }
+      for(size_t i = 0; i < 1000; ++i) {
+	 const key_type key = random_int<key_type>(max_key);
+	 if(rev.find(key) == rev.end()) {
+	    ASSERT_EQ(set.find(key), set.end());
+	 } else {
+	    ASSERT_NE(set.find(key), set.end());
+	 }
+      }
+   }
+}
+TEST(set_plain_32, random) { 
+   separate_chaining_set<plain_key_bucket<uint32_t> COMMA hash_mapping_adapter<uint32_t COMMA SplitMix>> set;
+   test_set_random(set);
+} 
 
 
 

@@ -46,38 +46,83 @@ class arbitrary_resize_bucket {
     }
 };
 
-
 template<class hash_map>
-    class chaining_bucket_iterator {
+    class chaining_bucket_navigator {
     public:
         using key_type = typename hash_map::key_type;
         using value_type = typename hash_map::value_type;
-        using pair_type = std::pair<key_type, value_type>;
-        using bucketsize_type = typename hash_map::bucketsize_type;
-        using class_type = chaining_bucket_iterator<hash_map>;
+        using class_type = chaining_bucket_navigator<hash_map>;
 
         //private:
-        const hash_map& m_map;
-        bucketsize_type m_position;
-        pair_type m_pair;
-
-
-        void update() {
-            DCHECK_LT(m_position, m_map.size());
-            const key_type read_key = m_map.m_keys.read(m_position, m_map.key_bit_width());
-            m_pair = std::make_pair(read_key, m_map.m_values[m_position]);
-        }
+        hash_map& m_map;
+        size_t m_position;
 
     public:
-        chaining_bucket_iterator(const hash_map& map, const bucketsize_type position) 
+        chaining_bucket_navigator(hash_map& map, const size_t position) 
             : m_map(map), m_position(position) {
-                if(!invalid()) { update(); }
             }
 
         class_type& operator++() { 
             DCHECK_LT(m_position, m_map.size());
             ++m_position;
-            if(m_position < m_map.size()) { update(); }
+            return *this;
+        }
+        const key_type key() const {
+            DCHECK_LT(m_position, m_map.size());
+            return m_map.m_keys.read(m_position, m_map.key_bit_width());
+        }
+        const value_type& value() const {
+            DCHECK_LT(m_position, m_map.size());
+            return m_map.m_values[m_position];
+        }
+        value_type& value_ref() {
+            DCHECK_LT(m_position, m_map.size());
+            return m_map.m_values[m_position];
+        }
+        bool invalid() const {
+            return m_position >= m_map.size();
+        }
+
+        template<class U>
+        bool operator!=(const chaining_bucket_navigator<U>& o) const {
+            return !( (*this)  == o);
+        }
+
+        template<class U>
+        bool operator==(const chaining_bucket_navigator<U>& o) const {
+          if(!o.invalid() && !invalid()) return o.m_position == m_position; // compare positions
+          return o.invalid() == invalid();
+        }
+};
+
+template<class hash_map>
+    class chaining_bucket_iterator : public chaining_bucket_navigator<hash_map> {
+    public:
+        using key_type = typename hash_map::key_type;
+        using value_type = typename hash_map::value_type;
+        using pair_type = std::pair<key_type, value_type>;
+        using class_type = chaining_bucket_iterator<hash_map>;
+        using super_type = chaining_bucket_navigator<hash_map>;
+
+        //private:
+        pair_type m_pair;
+
+
+        void update() {
+            DCHECK_LT(super_type::m_position, super_type::m_map.size());
+            m_pair = std::make_pair(super_type::key(), super_type::value());
+        }
+
+    public:
+        chaining_bucket_iterator(hash_map& map, const size_t position) 
+            : super_type(map, position) {
+                if(!super_type::invalid()) { update(); }
+            }
+
+        class_type& operator++() { 
+            DCHECK_LT(super_type::m_position, super_type::m_map.size());
+            super_type::operator++();
+            if(!super_type::invalid()) { update(); }
             return *this;
         }
 
@@ -88,15 +133,14 @@ template<class hash_map>
         const pair_type* operator->() const {
             return &m_pair;
         }
-        bool operator!=(const chaining_bucket_iterator& o) const {
+        template<class U>
+        bool operator!=(const chaining_bucket_iterator<U>& o) const {
             return !( (*this)  == o);
         }
-        bool invalid() const {
-            return m_position >= m_map.size();
-        }
-        bool operator==(const chaining_bucket_iterator& o) const {
-          if(!o.invalid() && !invalid()) return o.m_position == m_position; // compare positions
-          return o.invalid() == invalid();
+
+        template<class U>
+        bool operator==(const chaining_bucket_iterator<U>& o) const {
+          return super_type::operator==(o);
         }
 };
 
@@ -116,6 +160,9 @@ class chaining_bucket {
     using size_type = uint64_t; //! used for addressing the i-th bucket
     using class_type = chaining_bucket<key_bucket_type, value_bucket_type, resize_strategy_type>;
     using iterator = chaining_bucket_iterator<class_type>;
+    using const_iterator = chaining_bucket_iterator<const class_type>;
+    using navigator = chaining_bucket_navigator<class_type>;
+    using const_navigator = chaining_bucket_navigator<const class_type>;
 
     ON_DEBUG(key_type* m_plainkeys = nullptr;) //!bucket for keys in plain format for debugging purposes
 
@@ -224,28 +271,34 @@ class chaining_bucket {
     }
 #endif
 
-    const iterator end() const {
-        return iterator { *this, static_cast<bucketsize_type>(-1ULL) };
+    const iterator end() {
+        return iterator { *this, static_cast<size_t>(-1ULL) };
     }
-    const iterator cend() const {
-        return iterator { *this, static_cast<bucketsize_type>(-1ULL) };
+    const const_iterator cend() const {
+        return const_iterator { *this, static_cast<size_t>(-1ULL) };
     }
-    const iterator begin() const {
-        return iterator { *this, static_cast<bucketsize_type>(0) };
+    const iterator begin() {
+        return iterator { *this, static_cast<size_t>(0) };
     }
-    const iterator cbegin() const {
-        return iterator { *this, static_cast<bucketsize_type>(0) };
+    const const_iterator cbegin() const {
+        return const_iterator { *this, static_cast<size_t>(0) };
+    }
+    const const_iterator begin() const {
+        return cbegin();
+    }
+    const const_iterator end() const {
+        return cend();
     }
 
-    iterator find(const key_type& key) const {
-        if(!m_keys.initialized()) return end();
-        const bucketsize_type position = locate(key);
-        return iterator { *this, position };
+    const_iterator find(const key_type& key) const {
+        if(!m_keys.initialized()) return cend();
+        const size_t position = locate(key);
+        return const_iterator { *this, position };
     }
 
-    bucketsize_type locate(const key_type& key) const {
+    size_t locate(const key_type& key) const {
 #ifndef NDEBUG
-        bucketsize_type plain_position = static_cast<bucketsize_type>(-1ULL);
+        size_t plain_position = static_cast<size_t>(-1ULL);
         for(size_t i = 0; i < m_elements; ++i) { 
             const key_type read_key = m_keys.read(i, m_width);
             DCHECK_EQ(read_key, m_plainkeys[i]);
@@ -256,11 +309,11 @@ class chaining_bucket {
         }
 #endif//NDEBUG
 
-        const bucketsize_type position = static_cast<bucketsize_type>(m_keys.find(key, m_elements, m_width));
+        const size_t position = static_cast<size_t>(m_keys.find(key, m_elements, m_width));
 
 #ifndef NDEBUG
         DCHECK_EQ(position, plain_position);
-        if(position != static_cast<bucketsize_type>(-1ULL)) {
+        if(position != static_cast<size_t>(-1ULL)) {
             DCHECK_LT(position, m_elements);
             return position;
         }
@@ -272,12 +325,11 @@ class chaining_bucket {
         DCHECK_LE(key, max_key());
         DCHECK(m_keys.initialized());
         const size_t position = locate(key);
-        DCHECK(position != static_cast<bucketsize_type>(-1ULL));
+        DCHECK(position != static_cast<size_t>(-1ULL));
         DCHECK_LT(position, m_elements);
         return m_values[position];
     }
-
-    value_type& operator[](const key_type& key) {
+    navigator find_or_insert(const key_type& key, value_type&& value) {
         DCHECK_LE(key, max_key());
         if(!m_keys.initialized()) {
             m_elements = 1;
@@ -288,9 +340,9 @@ class chaining_bucket {
         } else { 
             const size_t position = locate(key);
 
-            if(position != static_cast<bucketsize_type>(-1ULL)) {
+            if(position != static_cast<size_t>(-1ULL)) {
                 DCHECK_LT(position, m_elements);
-                return m_values[position];
+                return navigator { *this, position };
             }
 
 
@@ -311,14 +363,19 @@ class chaining_bucket {
         ON_DEBUG(m_plainkeys[m_elements-1] = key;)
         m_keys.write(m_elements-1, key, m_width);
 
-        return m_values[m_elements-1];
+        m_values[m_elements-1] = std::move(value);
+        return navigator { *this, m_elements-1};
+    }
+
+    value_type& operator[](const key_type& key) {
+        return find_or_insert(key, value_type()).value_ref();
     }
 
     ~chaining_bucket() { clear(); }
 
     /** @see std::set **/
     size_type count(const key_type& key ) const {
-        return find(key) == end() ? 0 : 1;
+        return find(key) == cend() ? 0 : 1;
     }
 
     //! @see std::set
@@ -327,14 +384,18 @@ class chaining_bucket {
 
         const auto position = locate(key);
 
-        if(position == static_cast<bucketsize_type>(-1ULL)) return 0;
+        if(position == static_cast<size_t>(-1ULL)) return 0;
 
         for(size_t i = position+1; i < m_elements; ++i) {
             m_keys.write(i-1, m_keys.read(i, m_width), m_width);
             ON_DEBUG(m_plainkeys[i-1] = m_plainkeys[i];)
             m_values[i-1] = m_values[i];
         }
+        DCHECK_GT(m_elements, 0);
         --m_elements;
+        if(m_elements == 0) { //clear the bucket if it becomes empty
+            clear();
+        }
         return 1;
     }
 

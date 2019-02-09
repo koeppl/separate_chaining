@@ -68,6 +68,10 @@ This class uses the map `large_map_type` for storing keys with bit width 64.
 For small data sets (< 100 elements), it is faster and more memory efficient to use a single bucket without hashing by relying on large caches during the linear scanning process.
 The class `chaining_bucket` wraps a single bucket in a map/set interface. 
 
+## Usage
+- Elements can be searched with `find`
+- The map can be used with the handy []-operator for retrieving and writing values. 
+- `find_or_insert` can be used to insert a key with a default value, or retrieve this key's value if it has already been inserted.
 
 ## Implementation Details
 
