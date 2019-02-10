@@ -37,6 +37,12 @@ struct separate_chaining_navigator {
         }
 
     public:
+        const size_t& bucket() const {
+            return m_bucket;
+        }
+        const size_t& position() const {
+            return m_position;
+        }
         separate_chaining_navigator(hash_map& map, size_t bucket, size_t position) 
             : m_map(map), m_bucket(bucket), m_position(position) {
             }
@@ -256,6 +262,7 @@ class separate_chaining_table {
     using navigator = separate_chaining_navigator<class_type>;
     using const_navigator = separate_chaining_navigator<const class_type>;
 
+    static_assert(MAX_BUCKET_BYTESIZE/sizeof(key_type) <= std::numeric_limits<bucketsize_type>::max(), "enlarge separate_chaining::MAX_BUCKET_BYTESIZE for this key type!");
 
     resize_strategy_type m_resize_strategy;
 
@@ -358,7 +365,7 @@ class separate_chaining_table {
 
     size_t max_bucket_size() const { //! largest number of elements a bucket can contain before enlarging the hash table
         const size_t ret = (separate_chaining::MAX_BUCKET_BYTESIZE*8)/m_width;
-        DCHECK_LT(ret, std::numeric_limits<bucketsize_type>::max());
+        DCHECK_LE(ret, std::numeric_limits<bucketsize_type>::max());
         return ret;
     }
 

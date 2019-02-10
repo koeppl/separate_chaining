@@ -1,11 +1,11 @@
 #pragma once
 
 namespace separate_chaining {
-    //static constexpr size_t MAX_BUCKET_BYTESIZE = 128;
-    static constexpr size_t MAX_BUCKET_BYTESIZE = 254; //! maximum number of elements a bucket can store
     static constexpr size_t INITIAL_BUCKETS = 16; //! number of buckets a separate hash table holds initially
     using bucketsize_type = uint8_t; //! type for storing the sizes of the buckets
-    static_assert(MAX_BUCKET_BYTESIZE < std::numeric_limits<bucketsize_type>::max(), "enlarge separate_chaining::MAX_BUCKET_BYTESIZE for this key type!");
+    //static constexpr size_t MAX_BUCKET_BYTESIZE = 128;
+    static constexpr size_t MAX_BUCKET_BYTESIZE = std::numeric_limits<bucketsize_type>::max(); //! maximum number of elements a bucket can store
+    static_assert(MAX_BUCKET_BYTESIZE <= std::numeric_limits<bucketsize_type>::max(), "enlarge separate_chaining::MAX_BUCKET_BYTESIZE for this key type!");
 
 
 //! let a full bucket grow incrementally on insertion such that there is no need to store the capacity of a bucket (since it is always full)
