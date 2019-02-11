@@ -198,9 +198,9 @@ void test_map_random_large(T& map) {
    TEST(x, random) { y; test_map_random(map); } \
    TEST(x, random_large) { y; test_map_random_large(map); }
 
-TEST_MAP(bmap_avx2_16_arb_16,  separate_chaining_map<avx2_key_bucket<uint16_t> COMMA plain_key_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix> COMMA arbitrary_resize> map)
 
 
+TEST_MAP(map_var_Xor_64, separate_chaining_map<varwidth_key_bucket COMMA plain_key_bucket<uint32_t> COMMA xorshift_hash COMMA incremental_resize> map(64))
 
 TEST_MAP(map_avx2_16_16,  separate_chaining_map<avx2_key_bucket<uint16_t> COMMA plain_key_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix> COMMA incremental_resize > map)
 TEST_MAP(map_avx2_8_16,  separate_chaining_map<avx2_key_bucket<uint8_t> COMMA plain_key_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix> COMMA incremental_resize> map)

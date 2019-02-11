@@ -1,22 +1,26 @@
 #pragma once
+#include <cstdint>
+#include "dcheck.hpp"
+
 // Source: https://github.com/kampersanda/poplar-trie/blob/master/include/poplar/bijective_hash.hpp
 //
 namespace poplar{namespace bijective_hash {
 
 class size_p2_t {
 public:
-  size_p2_t() = default;
+  size_p2_t(uint_fast8_t bits)
+    : m_bits{bits}, m_mask{-1ULL >> (64-bits)} {
+      DCHECK_LT(0, bits);
+      DCHECK_LE(bits, 64);
+      DCHECK_LT(0, mask());
+    }
 
-  explicit size_p2_t(uint32_t bits)
-    : bits_{bits}, mask_{(1ULL << bits) - 1} {}
-
-  uint32_t bits() const { return bits_; }
-  uint64_t mask() const { return mask_; }
-  uint64_t size() const { return mask_ + 1; }
+  uint_fast8_t bits() const { return m_bits; }
+  uint64_t mask() const { return m_mask; }
 
 private:
-  uint32_t bits_{};
-  uint64_t mask_{};
+  uint_fast8_t m_bits;
+  uint64_t m_mask;
 };
 
 // (p, q): p < 2**w is a prime and q < 2**w is an integer such that pq mod m = 1
@@ -84,24 +88,23 @@ constexpr uint64_t PRIME_TABLE[][2][3] = {
   {{1152921504606846883ULL, 1152921504606846803ULL, 1152921504606846697ULL}, {12397005425880075ULL, 566464323072728283ULL, 4132335141960025ULL}}, // 60
   {{2305843009213693951ULL, 2305843009213693669ULL, 2305843009213693613ULL}, {2305843009213693951ULL, 1768084568902373101ULL, 360500529464087845ULL}}, // 61
   {{4611686018427387733ULL, 4611686018427387421ULL, 4611686018427387271ULL}, {4557748170258646525ULL, 152768066863019061ULL, 1515372340968241207ULL}}, // 62
-  {{9223372036854775291ULL, 9223372036854775279ULL, 9223372036854775181ULL}, {3657236494304118067ULL, 2545580940228350223ULL, 3339243145719352645ULL}} // 63
+  {{9223372036854775291ULL, 9223372036854775279ULL, 9223372036854775181ULL}, {3657236494304118067ULL, 2545580940228350223ULL, 3339243145719352645ULL}}, // 63
+  {{9223372036854775291ULL, 9223372036854775279ULL, 9223372036854775181ULL}, {3657236494304118067ULL, 11768952977083126031ULL, 3339243145719352645ULL}} // 64
 };
 
 class Xorshift {
 public:
   // Xorshift() = default;
 
-  Xorshift(uint32_t univ_bits) {
-    DCHECK(0 < univ_bits && univ_bits < 64);
-
-    shift_ = univ_bits / 2 + 1;
-    univ_size_ = size_p2_t{univ_bits};
-    DCHECK_LT(0, univ_size_.size());
+  Xorshift(uint_fast8_t univ_bits) 
+    : m_univ_size(univ_bits)
+    , m_shift(univ_bits / 2 + 1)
+  {
   }
   uint64_t operator()(uint64_t x) const { return hash(x); }
 
   uint64_t hash(uint64_t x) const {
-    DCHECK(x < univ_size_.size());
+    DCHECK_LE(x, m_univ_size.mask());
     x = hash_<0>(x);
     x = hash_<1>(x);
     x = hash_<2>(x);
@@ -109,44 +112,41 @@ public:
   }
 
   uint64_t hash_inv(uint64_t x) const {
-    DCHECK(x < univ_size_.size());
+    DCHECK_LE(x, m_univ_size.mask());
     x = hash_inv_<2>(x);
     x = hash_inv_<1>(x);
     x = hash_inv_<0>(x);
     return x;
   }
 
-  uint64_t size() const {
-    return univ_size_.size();
+  uint64_t mask() const {
+    return m_univ_size.mask();
   }
 
   uint64_t bits() const {
-    return univ_size_.bits();
+    return m_univ_size.bits();
   }
 
   void show_stat(std::ostream& os) const {
     os << "Statistics of Xorshift\n";
-    os << " - size: " << size() << "\n";
+    os << " - mask: " << mask() << "\n";
     os << " - bits: " << bits() << "\n";
   }
 
 private:
-  uint32_t shift_{};
-  size_p2_t univ_size_{};
+  size_p2_t m_univ_size;
+  uint_fast8_t m_shift;
 
-  // template<typename T>
-  // friend struct ::tdc::serialize;
-
-  template <uint32_t N>
+  template <uint_fast8_t N>
   uint64_t hash_(uint64_t x) const {
-    x = x ^ (x >> (shift_ + N));
-    x = (x * PRIME_TABLE[univ_size_.bits()][0][N]) & univ_size_.mask();
+    x = x ^ (x >> (m_shift + N));
+    x = (x * PRIME_TABLE[m_univ_size.bits()][0][N]) & m_univ_size.mask();
     return x;
   }
-  template <uint32_t N>
+  template <uint_fast8_t N>
   uint64_t hash_inv_(uint64_t x) const {
-    x = (x * PRIME_TABLE[univ_size_.bits()][1][N]) & univ_size_.mask();
-    x = x ^ (x >> (shift_ + N));
+    x = (x * PRIME_TABLE[m_univ_size.bits()][1][N]) & m_univ_size.mask();
+    x = x ^ (x >> (m_shift + N));
     return x;
   }
 };
