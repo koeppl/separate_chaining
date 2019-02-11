@@ -62,7 +62,7 @@ struct separate_chaining_navigator {
 
         class_type& operator++() { 
             DCHECK_LT(m_bucket, m_map.bucket_count());
-            if(m_position+1 == m_map.bucket_size(m_bucket)) { 
+            if(m_position+1 >= m_map.bucket_size(m_bucket)) { 
                 m_position = 0;
                 do { //search next non-empty bucket
                     ++m_bucket;

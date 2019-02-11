@@ -74,6 +74,7 @@ class avx2_key_bucket {
             _mm_free(m_keys);
         }
         m_keys = nullptr;
+        ON_DEBUG(m_length = 0;)
     }
 
     avx2_key_bucket() = default;
@@ -167,6 +168,7 @@ class plain_key_bucket {
             free(m_keys);
         }
         m_keys = nullptr;
+        ON_DEBUG(m_length = 0;)
     }
 
     plain_key_bucket() = default;
@@ -296,6 +298,7 @@ class varwidth_key_bucket {
             free(m_keys);
         }
         m_keys = nullptr;
+        ON_DEBUG(m_length = 0;)
     }
 
     varwidth_key_bucket() = default;
