@@ -72,6 +72,21 @@ struct separate_chaining_navigator {
             ++m_position;
             return *this;
         }
+        class_type& operator--() { 
+            DCHECK_LT(m_bucket, m_map.bucket_count());
+            if(m_position > 0) {
+                --m_position;
+                return *this;
+            }
+            do { //search next non-empty bucket
+                --m_bucket;
+            } while(m_bucket < m_map.bucket_count() && m_map.bucket_size(m_bucket) == 0); 
+            if(m_bucket < m_map.bucket_count()) {
+                DCHECK_NE(m_map.bucket_size(m_bucket), 0);
+                m_position = m_map.bucket_size(m_bucket)-1;
+            }
+            return *this;
+        }
 
         template<class U>
         bool operator!=(const separate_chaining_navigator<U>& o) const {
@@ -279,19 +294,25 @@ class separate_chaining_table {
     const uint_fast8_t m_width;
     hash_mapping_type m_hash; //! hash function
 
+
+    //! shrinks a bucket to its real size
+    void shrink_to_fit(size_t bucket) {
+        const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
+        const bucketsize_type& bucket_size = m_bucketsizes[bucket];
+        if(bucket_size == 0) return;
+        if(m_resize_strategy.can_shrink(bucket_size, bucket)) { 
+            m_keys[bucket].resize(bucket_size, bucket_size, key_bitwidth);
+            m_value_manager[bucket].resize(bucket_size, bucket_size);
+            m_resize_strategy.assign(bucket_size, bucket);
+        }
+    }
+
     //!@see std::vector
     void shrink_to_fit() {
         if(m_buckets == 0) return;
         const size_t cbucket_count = bucket_count();
-        const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
         for(size_t bucket = 0; bucket < cbucket_count;  ++bucket) {
-            const bucketsize_type& bucket_size = m_bucketsizes[bucket];
-            if(bucket_size == 0) continue;
-            if(m_resize_strategy.size(bucket_size, bucket) > bucket_size) { 
-                m_keys[bucket].resize(bucket_size, bucket_size, key_bitwidth);
-                m_value_manager[bucket].resize(bucket_size, bucket_size);
-                m_resize_strategy.assign(bucket_size, bucket);
-            }
+            shrink_to_fit(bucket);
         }
     }
 
@@ -488,18 +509,28 @@ class separate_chaining_table {
             swap(tmp_map);
         }
     }
+    const navigator rbegin_nav() {
+        const size_t cbucket_count = bucket_count();
+        for(size_t bucket = cbucket_count-1; bucket >= 0;  --bucket) {
+            if(m_bucketsizes[bucket] > 0) {
+                return { *this, bucket, static_cast<size_t>(m_bucketsizes[bucket]-1) };
+            }
+        }
+        return end_nav();
+    }
+    const navigator rend_nav() { return end_nav(); }
 
     const const_iterator cend() const {
-        return const_iterator { *this, -1ULL, -1ULL };
+        return { *this, -1ULL, -1ULL };
     }
     const iterator end() {
-        return iterator { *this, -1ULL, -1ULL };
+        return { *this, -1ULL, -1ULL };
     }
     const iterator begin() {
         const size_t cbucket_count = bucket_count();
         for(size_t bucket = 0; bucket < cbucket_count;  ++bucket) {
             if(m_bucketsizes[bucket] > 0) {
-                return iterator { *this, bucket, 0 };
+                return { *this, bucket, 0 };
             }
         }
         return end();
@@ -508,7 +539,7 @@ class separate_chaining_table {
         const size_t cbucket_count = bucket_count();
         for(size_t bucket = 0; bucket < cbucket_count;  ++bucket) {
             if(m_bucketsizes[bucket] > 0) {
-                return const_iterator { *this, bucket, 0 };
+                return { *this, bucket, 0 };
             }
         }
         return cend();
@@ -517,25 +548,25 @@ class separate_chaining_table {
         const size_t cbucket_count = bucket_count();
         for(size_t bucket = 0; bucket < cbucket_count;  ++bucket) {
             if(m_bucketsizes[bucket] > 0) {
-                return navigator { *this, bucket, 0 };
+                return { *this, bucket, 0 };
             }
         }
         return end_nav();
     }
     const navigator end_nav() {
-        return navigator { *this, -1ULL, -1ULL };
+        return { *this, -1ULL, -1ULL };
     }
     const const_navigator cbegin_nav() const {
         const size_t cbucket_count = bucket_count();
         for(size_t bucket = 0; bucket < cbucket_count;  ++bucket) {
             if(m_bucketsizes[bucket] > 0) {
-                return const_navigator { *this, bucket, 0 };
+                return { *this, bucket, 0 };
             }
         }
         return cend_nav();
     }
     const const_navigator cend_nav() const {
-        return const_navigator { *this, -1ULL, -1ULL };
+        return { *this, -1ULL, -1ULL };
     }
 
     const_iterator find(const key_type& key) const {

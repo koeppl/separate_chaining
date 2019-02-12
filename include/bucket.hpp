@@ -188,10 +188,22 @@ class plain_key_bucket {
         ON_DEBUG(m_length = size;)
     }
 
+
+
+#if defined(__GNUC__) && !defined(__INTEL_COMPILER) && (((__GNUC__ * 100) + __GNUC_MINOR__) >= 800)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wclass-memaccess"
+#endif
+// this function creates warnings when key_type is a class wrapped around a POD
     void resize([[maybe_unused]] const size_t oldsize, const size_t size, [[maybe_unused]] const size_t width = 0) {
         m_keys = reinterpret_cast<key_type*>  (realloc(m_keys, sizeof(key_type)*size));
         ON_DEBUG(m_length = size;)
     }
+
+
+#if defined(__GNUC__) && !defined(__INTEL_COMPILER) && (((__GNUC__ * 100) + __GNUC_MINOR__) >= 800)
+#pragma GCC diagnostic pop
+#endif
 
     void write(const size_t i, const key_type& key, [[maybe_unused]] const uint_fast8_t width) {
         DCHECK_LT(i, m_length);

@@ -67,6 +67,11 @@ template<class hash_map>
             ++m_position;
             return *this;
         }
+        class_type& operator--() { 
+            DCHECK_LT(m_position, m_map.size());
+            --m_position;
+            return *this;
+        }
         const key_type key() const {
             DCHECK_LT(m_position, m_map.size());
             return m_map.m_keys.read(m_position, m_map.key_bit_width());
@@ -289,6 +294,10 @@ class chaining_bucket {
     const const_iterator end() const {
         return cend();
     }
+    const navigator rbegin_nav() {
+        return {*this, m_elements-1 };
+    }
+    const navigator rend_nav() { return  { *this, static_cast<size_t>(-1ULL) }; }
 
     const_iterator find(const key_type& key) const {
         if(!m_keys.initialized()) return cend();

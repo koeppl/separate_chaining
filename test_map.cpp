@@ -68,6 +68,9 @@ void test_map_iterator(T& map) {
    for(auto it = map.begin(); it != map.end(); ++it) {
       ASSERT_EQ(it->first, max_key - it->second);
    }
+   for(auto it = map.rbegin_nav(); it != map.rend_nav(); --it) {
+      ASSERT_EQ(it.key(), max_key - it.value());
+   }
 
    const size_t size = map.size();
    ASSERT_EQ(map.size(), size);

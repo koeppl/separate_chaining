@@ -22,6 +22,7 @@ struct incremental_resize {
         return newsize;
     }
     constexpr static bool needs_resize([[maybe_unused]] const size_t newsize, [[maybe_unused]] const size_t bucket = 0) { return true; }
+    constexpr static bool can_shrink([[maybe_unused]] const size_t newsize, [[maybe_unused]] const size_t bucket = 0) { return true; } // we do not know the actual size, so lets always try
     constexpr static void assign([[maybe_unused]] const size_t size, [[maybe_unused]] const size_t bucket = 0) {}
     constexpr static void clear() {}
 };
@@ -84,6 +85,9 @@ class arbitrary_resize {
             m_maxbucketsizes = nullptr;
         }
     }
+
+    //! checks whether we can shrink the bucket
+    bool can_shrink(const size_t current_size, const size_t bucket) const { return current_size < m_maxbucketsizes[bucket]; } // we do not know the actual size, so lets always try
 
     ~arbitrary_resize() {
         clear();

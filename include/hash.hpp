@@ -31,7 +31,8 @@ class hash_mapping_adapter {
     }
 
     std::pair<key_type, size_t> map(const key_type& key, [[maybe_unused]] const uint_fast8_t table_buckets) const {
-        return std::make_pair(key, m_func(key) & ((1ULL << table_buckets) - 1ULL));
+        //return std::make_pair(key, m_func(key) & ((1ULL << table_buckets) - 1ULL));
+        return std::make_pair(key, m_func(key) & (-1ULL >> (64-table_buckets) ));
     }
     key_type inv_map(const key_type& remainder, [[maybe_unused]] const size_t& hash_value, [[maybe_unused]] const uint8_t table_buckets) const {
         return remainder;

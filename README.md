@@ -79,6 +79,9 @@ The class `chaining_bucket` wraps a single bucket in a map/set interface.
 - A bucket can grow up to `MAX_BUCKET_BYTESIZE` elements. This value is linked with the type `bucketsize_type` representing integers up to `MAX_BUCKET_BYTESIZE`.
 - `erase` does not free memory. For that, use `fit_to_shrink`.
 - The typedefs for hash map and hash sets wrap the value bucket type `value_bucket_t` around a manager for the array of value buckets, which is either realized by `value_array_manager` using the straight-forward way (for emulating a hash map), or `value_dummy_manager` for storing no value at all (for emulating a hash set).
+- Since a bucket is split into a key and a value array, there is no natural `std::pair` representation of an element. 
+  This means that an iterator has to create a pair on the fly, which can cause a slowdown. 
+  Instead, you can use the navigator interface with the methods `key()` and `value()`.
 
 
 
