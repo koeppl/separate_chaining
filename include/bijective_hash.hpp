@@ -139,6 +139,7 @@ private:
 
   template <uint_fast8_t N>
   uint64_t hash_(uint64_t x) const {
+    DCHECK_LE(x, mask());
     x = x ^ (x >> (m_shift + N));
     x = (x * PRIME_TABLE[m_univ_size.bits()][0][N]) & m_univ_size.mask();
     return x;

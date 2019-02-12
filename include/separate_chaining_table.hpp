@@ -48,15 +48,18 @@ struct separate_chaining_navigator {
             }
 
         const key_type key()  const {
+            DCHECK(!invalid());
             const uint_fast8_t key_bitwidth = m_map.m_hash.remainder_width(m_map.m_buckets);
             const key_type read_quotient = m_map.m_keys[m_bucket].read(m_position, key_bitwidth);
             const key_type read_key = m_map.m_hash.inv_map(read_quotient, m_bucket, m_map.m_buckets);
             return read_key;
         }
         const value_type& value() const {
+            DCHECK(!invalid());
             return m_map.m_value_manager[m_bucket][m_position];
         }
         value_type& value_ref() {
+            DCHECK(!invalid());
             return m_map.m_value_manager[m_bucket][m_position];
         }
 
@@ -74,11 +77,11 @@ struct separate_chaining_navigator {
         }
         class_type& operator--() { 
             DCHECK_LT(m_bucket, m_map.bucket_count());
-            if(m_position > 0) {
-                --m_position;
+            if(m_position > 0 && m_map.bucket_size(m_bucket) > 0) {
+                m_position = std::min<size_t>(m_position,  m_map.bucket_size(m_bucket))-1; // makes an invalid pointer valid after erasing
                 return *this;
             }
-            do { //search next non-empty bucket
+            do { //search previous non-empty bucket
                 --m_bucket;
             } while(m_bucket < m_map.bucket_count() && m_map.bucket_size(m_bucket) == 0); 
             if(m_bucket < m_map.bucket_count()) {
@@ -331,6 +334,7 @@ class separate_chaining_table {
         m_value_manager.clear(bucket);
         m_keys[bucket].clear();
         ON_DEBUG(free(m_plainkeys[bucket]));
+        ON_DEBUG(m_plainkeys[bucket] = nullptr);
         m_bucketsizes[bucket] = 0;
         m_resize_strategy.assign(0,bucket);
     }
@@ -395,6 +399,10 @@ class separate_chaining_table {
         return 1ULL<<m_buckets;
     }
 
+    size_type bucket_count_log2() const {
+        return m_buckets;
+    }
+
     //! @see std::unordered_map
     bucketsize_type bucket_size(size_type n) const {
         return m_bucketsizes[n];
@@ -404,7 +412,7 @@ class separate_chaining_table {
         : m_width(width)
         , m_hash(m_width) 
     {
-        DCHECK_LE(width, sizeof(key_type)*8);
+        // DCHECK_LE(width, sizeof(key_type)*8);
     }
 
     separate_chaining_table(separate_chaining_table&& other)
@@ -675,6 +683,8 @@ class separate_chaining_table {
         
         DCHECK_LT((static_cast<size_t>(bucket_size-1)*key_bitwidth)/64 + ((bucket_size-1)* key_bitwidth) % 64, 64*ceil_div<size_t>(bucket_size*key_bitwidth, 64) );
 
+        DCHECK_LE(key_bitwidth, sizeof(key_type)*8);
+
         bucket_keys.write(bucket_size-1, quotient, key_bitwidth);
         DCHECK_EQ(m_hash.inv_map(bucket_keys.read(bucket_size-1, key_bitwidth), bucket, m_buckets), key);
 
@@ -746,18 +756,15 @@ class separate_chaining_table {
         return find(key) == cend() ? 0 : 1;
     }
 
-    //! @see std::set
-    size_type erase(const key_type& key) {
-        if(m_buckets == 0) return 0;
-
-        const auto [bucket, position] = locate(key);
+    size_type erase(const size_t bucket, const size_t position) {
+        if(position == static_cast<size_t>(-1ULL)) return 0;
 
         bucketsize_type& bucket_size = m_bucketsizes[bucket];
         key_bucket_type& bucket_keys = m_keys[bucket];
         value_bucket_type& bucket_values = m_value_manager[bucket];
         ON_DEBUG(key_type*& bucket_plainkeys = m_plainkeys[bucket];)
 
-        if(position == static_cast<size_t>(-1ULL)) return 0;
+        DCHECK_LE(bucket_size, bucket_keys.m_length);
 
         const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
 
@@ -766,12 +773,30 @@ class separate_chaining_table {
             ON_DEBUG(bucket_plainkeys[i-1] = bucket_plainkeys[i];)
             bucket_values[i-1] = bucket_values[i];
         }
+        DCHECK_GT(bucket_size, 0);
         --bucket_size;
         --m_elements;
         if(bucket_size == 0) { //clear the bucket if it becomes empty
             clear(bucket);
         }
         return 1;
+    }
+
+
+    //! @see std::set
+    size_type erase(const key_type& key) {
+        if(m_buckets == 0) return 0;
+        const auto [bucket, position] = locate(key);
+        return erase(bucket, position);
+
+    }
+
+    size_type erase(const navigator& it) {
+        return erase(it.bucket(), it.position());
+    }
+    size_type erase(const const_navigator& it) {
+        return erase(it.bucket(), it.position());
+
     }
 
 

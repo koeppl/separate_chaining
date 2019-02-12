@@ -61,11 +61,11 @@ template<class key_t>
 class avx2_key_bucket {
     public:
     using key_type = key_t;
+    ON_DEBUG(size_t m_length;)
 
     private:
     static constexpr size_t m_alignment = 32;
     key_type* m_keys = nullptr; //!bucket for keys
-    ON_DEBUG(size_t m_length;)
 
     public:
     bool initialized() const { return m_keys != nullptr; } //!check whether we can add elements to the bucket
@@ -154,10 +154,10 @@ template<class key_t>
 class plain_key_bucket {
     public:
     using key_type = key_t;
+    ON_DEBUG(size_t m_length;)
 
     protected:
     key_type* m_keys = nullptr; //!bucket for keys
-    ON_DEBUG(size_t m_length;)
 
     public:
 
@@ -298,10 +298,10 @@ class class_key_bucket : public plain_key_bucket<key_t> {
 class varwidth_key_bucket {
     public:
     using key_type = uint64_t;
+    ON_DEBUG(size_t m_length;)
 
     private:
     key_type* m_keys = nullptr; //!bucket for keys
-    ON_DEBUG(size_t m_length;)
 
     public:
     bool initialized() const { return m_keys != nullptr; } //!check whether we can add elements to the bucket
@@ -336,6 +336,7 @@ class varwidth_key_bucket {
         DCHECK_EQ(tdc::tdc_sdsl::bits_impl<>::read_int(m_keys + (static_cast<size_t>(i)*width)/64, ((i)* width) % 64, width), key);
     }
     key_type read(size_t i, size_t width) const {
+        DCHECK_LT((static_cast<size_t>(i)*width)/64 + ((i)* width) % 64, 64*ceil_div<size_t>(m_length*width, 64) );
         return tdc::tdc_sdsl::bits_impl<>::read_int(m_keys + (static_cast<size_t>(i)*width)/64, ((i)* width) % 64, width);
     }
 
