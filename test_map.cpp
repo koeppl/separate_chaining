@@ -1,11 +1,11 @@
 #include <iostream>
 #include <gtest/gtest.h>
 #include <map>
-#include "separate_chaining_table.hpp"
-#include "keysplit_adapter.hpp"
 #include <algorithm>
-#include "bijective_hash.hpp"
-#include "bucket_table.hpp"
+#include <separate/separate_chaining_table.hpp>
+#include <separate/keysplit_adapter.hpp>
+#include <separate/bijective_hash.hpp>
+#include <separate/bucket_table.hpp>
 
 using namespace separate_chaining;
 using bijective_hash = poplar::bijective_hash::Xorshift;

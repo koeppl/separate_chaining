@@ -10,14 +10,14 @@
 #include <unordered_map>
 #include <map>
 
-#include "separate_chaining_table.hpp"
-#include "keysplit_adapter.hpp"
+#include <separate/separate_chaining_table.hpp>
+#include <separate/keysplit_adapter.hpp>
 #include <tudocomp/util/compact_hash.hpp>
 #include <tudocomp/util/compact_displacement_hash.hpp>
 #include <tudocomp/util/compact_sparse_displacement_hash.hpp>
 #include <tudocomp/util/compact_sparse_hash.hpp>
 
-#include "/home/niki/code/prefixsearch/program/TPackedTrie/rigtorp/HashMap.h"
+// #include "/home/niki/code/prefixsearch/program/TPackedTrie/rigtorp/HashMap.h"
 
 using namespace separate_chaining;
 
@@ -145,12 +145,12 @@ int main() {
            map.push_back(el);
         }
     }
-    {
-        tdc::StatPhase v("rigtorp");
-        rigtorp::HashMap<key_type, value_type, SplitMix> map;
-        // std::unordered_map<key_type,value_type> map;
-        copy(rev,map);
-    }
+    // {
+    //     tdc::StatPhase v("rigtorp");
+    //     rigtorp::HashMap<key_type, value_type, SplitMix> map;
+    //     // std::unordered_map<key_type,value_type> map;
+    //     copy(rev,map);
+    // }
     {
         tdc::StatPhase v("unordered_map");
         std::unordered_map<key_type,value_type> map;

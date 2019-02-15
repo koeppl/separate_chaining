@@ -1,8 +1,7 @@
 #include <celero/Celero.h>
-#include "lcp.hpp"
-#include "dcheck.hpp"
 
-#include "separate_chaining_table.hpp"
+#include <separate/separate_chaining_table.hpp>
+#include <separate/dcheck.hpp>
 #include <map>
 
 #include <tudocomp/util/compact_hash.hpp>

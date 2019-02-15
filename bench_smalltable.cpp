@@ -1,15 +1,15 @@
 #include <celero/Celero.h>
-#include "lcp.hpp"
-#include "dcheck.hpp"
 
-#include "separate_chaining_table.hpp"
 #include <map>
 
 #include <tudocomp/util/compact_hash.hpp>
 #include <tudocomp/util/compact_displacement_hash.hpp>
 #include <tudocomp/util/compact_sparse_displacement_hash.hpp>
 #include <tudocomp/util/compact_sparse_hash.hpp>
-#include "bucket_table.hpp"
+
+#include <separate/dcheck.hpp>
+#include <separate/separate_chaining_table.hpp>
+#include <separate/bucket_table.hpp>
 
 using namespace separate_chaining;
 

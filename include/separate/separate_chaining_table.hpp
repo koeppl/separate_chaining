@@ -402,6 +402,7 @@ class separate_chaining_table {
 
     //! @see std::unordered_map
     size_type bucket_count() const {
+        if(m_buckets == 0) return 0;
         return 1ULL<<m_buckets;
     }
 
@@ -525,6 +526,7 @@ class separate_chaining_table {
     }
     const navigator rbegin_nav() {
         const size_t cbucket_count = bucket_count();
+        if(cbucket_count == 0) return end_nav();
         for(size_t bucket = cbucket_count-1; bucket >= 0;  --bucket) {
             if(m_bucketsizes[bucket] > 0) {
                 return { *this, bucket, static_cast<size_t>(m_bucketsizes[bucket]-1) };
