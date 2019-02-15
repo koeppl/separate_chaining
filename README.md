@@ -24,24 +24,24 @@ The hash table is called `separate_chaining_table`.
 There are two typedefs `separate_chaining_map` and `separate_chaining_set` for creating a `unordered_map` or `unordered_set`, respectively.
 The template parameters are:
 
-- `key_bucket_t<key_t>` the type of bucket to store keys of type `key_t`. These are defined in `bucket.hpp`, and are
-  - `class_key_bucket` for the most general case
-  - `plain_key_bucket` for the case that the keys can be copied with `std::memcpy` (complicated classes with copy constructors must be maintained in a `class_key_bucket`)
-  - `avx2_key_bucket` for the case that the keys are integers and that the CPU supports the AVX2 instruction set.
-  - `varwidth_key_bucket` for the case that the keys are integers and that there is an arbitrary maximum bit width of the integers to store. This is beneficient in combination with a compact hash function (see below). However, operations on this bucket take more time.
+- `key_bucket_t<storage_t>` the type of bucket to store keys of type `storage_t`. These are defined in `bucket.hpp`, and are
+  - `class_bucket` for the most general case
+  - `plain_bucket` for the case that the keys can be copied with `std::memcpy` (complicated classes with copy constructors must be maintained in a `class_bucket`)
+  - `avx2_bucket` for the case that the keys are integers and that the CPU supports the AVX2 instruction set.
+  - `varwidth_bucket` for the case that the keys are integers and that there is an arbitrary maximum bit width of the integers to store. This is beneficient in combination with a compact hash function (see below). However, operations on this bucket take more time.
 
-- `value_bucket_t` the type of bucket to store values. Possible classes are `class_key_bucket` and `plain_key_bucket`, which can also store values instead of keys. 
-Like in the description above, use `class_key_bucket` for non-`std::memcpy`-able value types.
+- `value_bucket_t` the type of bucket to store values. Possible classes are `class_bucket` and `plain_bucket`, which can also store values instead of keys. 
+Like in the description above, use `class_bucket` for non-`std::memcpy`-able value types.
 
 - `hash_mapping_t` is a mapping that takes a key and returns, based on the number of the buckets of the hash table, a pair consisting of a hash-value and a remainder.
   - The hash value is an integer in `[0, bucket_count()-1]`. 
   - The remainder is defined such that the keys can be restored from the pair. In the most simple case, the remainder is the key. 
-    This fact is used by the class `hash_mapping_adapter<key_t, hash_function>` that turns a standard hash function `hash_funtion` hashing `key_t` elements into a `hash_mapping_t`.
+    This fact is used by the class `hash_mapping_adapter<storage_t, hash_function>` that turns a standard hash function `hash_funtion` hashing `storage_t` elements into a `hash_mapping_t`.
 	Since the hash table can restore a key by having its hash value `v` and its remainder `r`, it stores `r` in the `v`-th bucket instead of the key.
-A non-trivial mapping is `xorshift_hash`. Here, the bit width of the remainder is the bit width of the remainder minus `log2(bucket_count())`. 
-In conjunction with `varwidth_key_bucket`, this fact can be used to represent the keys in less bits than their bit width.
+A non-trivial mapping is `xorshift_hash<storage_t, key_t>`. Here, the bit width of the remainder of type `storage_t` is the bit width of the key of type `key_t` minus `log2(bucket_count())`. 
+In conjunction with `varwidth_bucket`, this fact can be used to represent the keys in less bits than their bit width.
 This technique is also called quotienting.
-Another way is to allocate sufficiently large memory to store keys of a specific bit width in a `plain_key_bucket` or `avx2_key_bucket` storing remainders with a smaller bit width. For instance, 24-bit keys can be stored in `plain_key_bucket<uint8_t>` if there are `2^{24} / 2^{8} = 2^16 = 65536` buckets.
+Another way is to allocate sufficiently large memory to store keys of a specific bit width in a `plain_bucket` or `avx2_bucket` storing remainders with a smaller bit width. For instance, 24-bit keys can be stored in `plain_bucket<uint8_t>` if there are `2^{24} / 2^{8} = 2^16 = 65536` buckets.
 
 - `resize_strategy_t` defines what to do when inserting an element in a full bucket.
   - `incremental_resize` lets a bucket grow incrementally, which means that a bucket is always full, and that each insertion results in a `malloc` call.
@@ -50,6 +50,7 @@ Another way is to allocate sufficiently large memory to store keys of a specific
     and that there is no space wasted.
   - `arbitrary_resize` increases the size of a bucket in relation to its current size. The current implementation doubles the size `s` of a bucket until `s` is larger than a fixed threshold. 
   After surpassing the threshold, the size is increased merely by 50%. This behavior can be adjusted in `arbitrary_resize::resize`.
+
 
 ## Key Splitting
 
@@ -63,17 +64,17 @@ However, since `xorshift_hash` does not work with integers having a bit width of
 there is also a class `keysplit_adapter64<map_type, large_map_type, m_length>` that wraps around `keysplit_adapter<map_type, 63, m_length>`.
 This class uses the map `large_map_type` for storing keys with bit width 64.
 
-## Chaining Bucket
+## Bucket Table
 
 For small data sets (< 100 elements), it is faster and more memory efficient to use a single bucket without hashing by relying on large caches during the linear scanning process.
-The class `chaining_bucket` wraps a single bucket in a map/set interface. 
+The class `bucket_table` wraps a single bucket in a map/set interface. 
 
 ## Usage
 - Elements can be searched with `find`
 - The map can be used with the handy []-operator for retrieving and writing values. 
 - `find_or_insert` can be used to insert a key with a default value, or retrieve this key's value if it has already been inserted.
 
-## Implementation Details
+## Implementation Details and Advanced Usage
 
 - A bucket stores initially `INITIAL_BUCKETS` many buckets. This constant is defined for each `resize_strategy_t` differently. For `arbitrary_resize`, this size can be arbitrarily chosen.
 - A bucket can grow up to `MAX_BUCKET_BYTESIZE` elements. This value is linked with the type `bucketsize_type` representing integers up to `MAX_BUCKET_BYTESIZE`.
@@ -82,6 +83,7 @@ The class `chaining_bucket` wraps a single bucket in a map/set interface.
 - Since a bucket is split into a key and a value array, there is no natural `std::pair` representation of an element. 
   This means that an iterator has to create a pair on the fly, which can cause a slowdown. 
   Instead, you can use the navigator interface with the methods `key()` and `value()`.
+- If you want to process and delete processed elements like you would do with a stack or queue, start at `rbegin_nav` and end at `rend_nav`, using decremental operation on the navigator object.
 
 
 
@@ -98,5 +100,7 @@ The class `chaining_bucket` wraps a single bucket in a map/set interface.
 It is possible to extend this approach for Cuckoo Hashing with multiple hash functions.
 
 ## Related Work
+- [DySECT](https://github.com/TooBiased/DySECT): uses Cuckoo hashing with cache-optimized buckets. Our approach has orthogonal features (AXV2 / quotienting) that can be combined with this hash table layout.
+- [tsl::sparse_map](https://github.com/Tessil/sparse-map): sparse hash tables using quadratic probing
 - [bonsai tables](https://github.com/tudocomp/compact_sparse_hash): A set of hash tables using compact hashing and linear probing for collision resolution. 
   The linear probing makes it difficult to maintain a remainder with hash value `v` at position `v` in the hash table. For that additional maintaince is required that needs extra space and slows down the computation. On the other hand, it does not need buckets, and therefore can maintain elements more efficiently if the space requirement is known in advance.

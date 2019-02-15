@@ -104,28 +104,28 @@ int main() {
 
     {
         tdc::StatPhase v("compact");
-        separate_chaining_map<varwidth_key_bucket, plain_key_bucket<value_type>, xorshift_hash> map(NUM_RANGE);
+        separate_chaining_map<varwidth_bucket, plain_bucket<value_type>, xorshift_hash<>> map(NUM_RANGE);
         copy(rev,map);
         tdc::StatPhase finalize("finalize");
         map.print_stats(finalize);
     }
     {
         tdc::StatPhase v("plain 32");
-        separate_chaining_map<plain_key_bucket<key_type>, plain_key_bucket<value_type>, hash_mapping_adapter<key_type, SplitMix>> map(NUM_RANGE);
+        separate_chaining_map<plain_bucket<key_type>, plain_bucket<value_type>, hash_mapping_adapter<key_type, SplitMix>> map(NUM_RANGE);
         copy(rev,map);
         tdc::StatPhase finalize("finalize");
         map.print_stats(finalize);
     }
     {
         tdc::StatPhase v("plain 32 arb");
-        separate_chaining_map<plain_key_bucket<key_type>, plain_key_bucket<value_type>, hash_mapping_adapter<key_type, SplitMix>, arbitrary_resize> map(NUM_RANGE);
+        separate_chaining_map<plain_bucket<key_type>, plain_bucket<value_type>, hash_mapping_adapter<key_type, SplitMix>, arbitrary_resize> map(NUM_RANGE);
         copy(rev,map);
         tdc::StatPhase finalize("finalize");
         map.print_stats(finalize);
     }
     {
         tdc::StatPhase v("split key");
-        keysplit_adapter<separate_chaining_map<varwidth_key_bucket, plain_key_bucket<uint16_t>, hash_mapping_adapter<value_type, SplitMix>>> map;
+        keysplit_adapter<separate_chaining_map<varwidth_bucket, plain_bucket<uint16_t>, hash_mapping_adapter<value_type, SplitMix>>> map;
         copy(rev,map);
     }
 

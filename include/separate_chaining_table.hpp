@@ -21,6 +21,7 @@ namespace separate_chaining {
 template<class hash_map>
 struct separate_chaining_navigator {
     public:
+        using storage_type = typename hash_map::storage_type;
         using key_type = typename hash_map::key_type;
         using value_type = typename hash_map::value_type;
         using size_type = typename hash_map::size_type;
@@ -50,7 +51,7 @@ struct separate_chaining_navigator {
         const key_type key()  const {
             DCHECK(!invalid());
             const uint_fast8_t key_bitwidth = m_map.m_hash.remainder_width(m_map.m_buckets);
-            const key_type read_quotient = m_map.m_keys[m_bucket].read(m_position, key_bitwidth);
+            const storage_type read_quotient = m_map.m_keys[m_bucket].read(m_position, key_bitwidth);
             const key_type read_key = m_map.m_hash.inv_map(read_quotient, m_bucket, m_map.m_buckets);
             return read_key;
         }
@@ -161,6 +162,7 @@ class null_value_bucket {
     bool m_true = true;
     public:
     using key_type = bool;
+    using storage_type = bool;
     bool& operator[](size_t)  {
         return m_true;
     }
@@ -180,6 +182,7 @@ class value_dummy_manager {
     public:
     using value_bucket_type = null_value_bucket;
     using value_type = typename null_value_bucket::key_type;
+    using storage_type = typename null_value_bucket::storage_type;
 
     static null_value_bucket m_bucket;
 
@@ -211,7 +214,7 @@ template<class value_bucket_t>
 class value_array_manager {
     public:
     using value_bucket_type = value_bucket_t;
-    using value_type = typename value_bucket_type::key_type;
+    using value_type = typename value_bucket_type::storage_type;
 
     private:
     value_bucket_type* m_values = nullptr; //! bucket for values
@@ -267,8 +270,11 @@ class separate_chaining_table {
 
     using resize_strategy_type = resize_strategy_t; //! how large a buckets becomes resized
 
-    using key_type = typename key_bucket_type::key_type;
-    using value_type = typename value_bucket_type::key_type;
+
+    using storage_type = typename hash_mapping_t::storage_type;
+    using key_type = typename hash_mapping_t::key_type;
+    static_assert(std::is_same<typename hash_mapping_t::storage_type, typename key_bucket_type::storage_type>::value, "hash_mapping_t::storage_type and key_bucket_type::key_type must be the same!");
+    using value_type = typename value_bucket_type::storage_type;
     // static_assert(std::is_same<key_type, typename hash_mapping_t::key_type>::value, "key types of bucket and hash_mapping mismatch!") ;
     static_assert(std::numeric_limits<key_type>::max() <= std::numeric_limits<typename hash_mapping_t::key_type>::max(), "key types of bucket must have at most as many bits as key type of hash_mapping!") ;
 
@@ -506,7 +512,7 @@ class separate_chaining_table {
                 const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
                 const key_bucket_type& bucket_keys_it = m_keys[bucket];
                 for(size_t i = 0; i < m_bucketsizes[bucket]; ++i) {
-                    const key_type read_quotient = bucket_keys_it.read(i, key_bitwidth);
+                    const storage_type read_quotient = bucket_keys_it.read(i, key_bitwidth);
                     const key_type read_key = m_hash.inv_map(read_quotient, bucket, m_buckets);
                     DCHECK_EQ(read_key, m_plainkeys[bucket][i]);
                     tmp_map[read_key] =  std::move(m_value_manager[bucket][i]);
@@ -588,7 +594,8 @@ class separate_chaining_table {
         return const_iterator { *this, bucket, position };
     }
 
-    size_t locate(const size_t& bucket, const key_type& quotient) const {
+    private:
+    size_t locate(const size_t& bucket, const storage_type& quotient) const {
         const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
         DCHECK_LE(most_significant_bit(quotient), key_bitwidth);
 
@@ -621,6 +628,7 @@ class separate_chaining_table {
         return position;
     }
 
+    public:
     /*
      * Returns the location of a key if it is stored in the table.
      * The location is a pair consisting of the bucket and the position within the bucket.

@@ -9,7 +9,7 @@
 #include <tudocomp/util/compact_displacement_hash.hpp>
 #include <tudocomp/util/compact_sparse_displacement_hash.hpp>
 #include <tudocomp/util/compact_sparse_hash.hpp>
-#include "chaining_bucket.hpp"
+#include "bucket_table.hpp"
 
 using namespace separate_chaining;
 
@@ -32,14 +32,14 @@ class Fixture {
 
    using map_type       = std::map<key_type                                , value_type>;
    using unordered_type = std::unordered_map<key_type                      , value_type   , SplitMix>;
-   using plain_arb_type     = separate_chaining_map<plain_key_bucket<key_type> , plain_key_bucket<value_type>  , hash_mapping_adapter<key_type , SplitMix>, arbitrary_resize>;
-   using plain_type     = separate_chaining_map<plain_key_bucket<key_type> , plain_key_bucket<value_type>  , hash_mapping_adapter<key_type , SplitMix>>;
-   using avx2_type      = separate_chaining_map<avx2_key_bucket<key_type>  , plain_key_bucket<value_type>  , hash_mapping_adapter<uint64_t , SplitMix>>;
-   using compact_type   = separate_chaining_map<varwidth_key_bucket        , plain_key_bucket<value_type>  , xorshift_hash>;
+   using plain_arb_type     = separate_chaining_map<plain_bucket<key_type> , plain_bucket<value_type>  , hash_mapping_adapter<key_type , SplitMix>, arbitrary_resize>;
+   using plain_type     = separate_chaining_map<plain_bucket<key_type> , plain_bucket<value_type>  , hash_mapping_adapter<key_type , SplitMix>>;
+   using avx2_type      = separate_chaining_map<avx2_bucket<key_type>  , plain_bucket<value_type>  , hash_mapping_adapter<key_type , SplitMix>>;
+   using compact_type   = separate_chaining_map<varwidth_bucket        , plain_bucket<value_type>  , xorshift_hash<>>;
 
-   using bucket_type   = chaining_bucket<varwidth_key_bucket        , plain_key_bucket<value_type>, incremental_resize>;
-   using bucket_arb_type   = chaining_bucket<varwidth_key_bucket        , plain_key_bucket<value_type>, arbitrary_resize_bucket>;
-   using bucket_avx2_type   = chaining_bucket<varwidth_key_bucket        , plain_key_bucket<value_type>, incremental_resize>;
+   using bucket_type   = bucket_table<varwidth_bucket        , plain_bucket<value_type>, incremental_resize>;
+   using bucket_arb_type   = bucket_table<varwidth_bucket        , plain_bucket<value_type>, arbitrary_resize_bucket>;
+   using bucket_avx2_type   = bucket_table<varwidth_bucket        , plain_bucket<value_type>, incremental_resize>;
 
    map_type* m_map = nullptr;
    unordered_type* m_ordered = nullptr;

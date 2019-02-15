@@ -31,10 +31,10 @@ class Fixture {
 
    using map_type       = std::map<key_type                                , value_type>;
    using unordered_type = std::unordered_map<key_type                      , value_type   , SplitMix>;
-   using plain_arb_type     = separate_chaining_map<plain_key_bucket<key_type> , plain_key_bucket<value_type>  , hash_mapping_adapter<key_type , SplitMix>, arbitrary_resize>;
-   using plain_type     = separate_chaining_map<plain_key_bucket<key_type> , plain_key_bucket<value_type>  , hash_mapping_adapter<key_type , SplitMix>>;
-   using avx2_type      = separate_chaining_map<avx2_key_bucket<key_type>  , plain_key_bucket<value_type>  , hash_mapping_adapter<uint64_t , SplitMix>>;
-   using compact_type   = separate_chaining_map<varwidth_key_bucket        , plain_key_bucket<value_type>  , xorshift_hash>;
+   using plain_arb_type     = separate_chaining_map<plain_bucket<key_type> , plain_bucket<value_type>  , hash_mapping_adapter<key_type , SplitMix>, arbitrary_resize>;
+   using plain_type     = separate_chaining_map<plain_bucket<key_type> , plain_bucket<value_type>  , hash_mapping_adapter<key_type , SplitMix>>;
+   using avx2_type      = separate_chaining_map<avx2_bucket<key_type>  , plain_bucket<value_type>  , hash_mapping_adapter<key_type , SplitMix>>;
+   using compact_type   = separate_chaining_map<varwidth_bucket        , plain_bucket<value_type>  , xorshift_hash<>>;
 #ifdef USE_BONSAI_TABLES
    using elias_type     = tdc::compact_sparse_hashmap::compact_sparse_elias_displacement_hashmap_t<value_type>;
    using cleary_type    = tdc::compact_sparse_hashmap::compact_sparse_hashmap_t<value_type>;

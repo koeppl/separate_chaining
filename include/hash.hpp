@@ -18,6 +18,7 @@ template<class key_t, class hash_function>
 class hash_mapping_adapter {
     public:
     using key_type = key_t;
+    using storage_type = key_t;
 
     private:
     uint8_t m_width;
@@ -30,18 +31,20 @@ class hash_mapping_adapter {
         return sizeof(key_t)*8;
     }
 
-    std::pair<key_type, size_t> map(const key_type& key, [[maybe_unused]] const uint_fast8_t table_buckets) const {
+    std::pair<storage_type, size_t> map(const key_type& key, [[maybe_unused]] const uint_fast8_t table_buckets) const {
         //return std::make_pair(key, m_func(key) & ((1ULL << table_buckets) - 1ULL));
         return std::make_pair(key, m_func(key) & (-1ULL >> (64-table_buckets) ));
     }
-    key_type inv_map(const key_type& remainder, [[maybe_unused]] const size_t& hash_value, [[maybe_unused]] const uint8_t table_buckets) const {
+    key_type inv_map(const storage_type& remainder, [[maybe_unused]] const size_t& hash_value, [[maybe_unused]] const uint8_t table_buckets) const {
         return remainder;
     }
 };
 
+template<class key_t = uint64_t, class storage_t = key_t>
 class xorshift_hash {
     public:
-    using key_type = uint64_t;
+    using key_type = key_t;
+    using storage_type = storage_t;
 
     private:
     poplar::bijective_hash::Xorshift func;
@@ -54,15 +57,15 @@ class xorshift_hash {
         return func.bits() - table_buckets;
     }
     
-    std::pair<key_type, size_t> map(const key_type& key, const uint_fast8_t table_buckets) const {
+    std::pair<storage_type, size_t> map(const key_type& key, const uint_fast8_t table_buckets) const {
         const size_t hash_value = func.hash(key);
         DCHECK_EQ(func.hash_inv(hash_value), key);
-        DCHECK_LT(hash_value >> table_buckets, std::numeric_limits<key_type>::max());
+        DCHECK_LE(hash_value >> table_buckets, std::numeric_limits<storage_type>::max());
         const auto ret = std::make_pair(hash_value >> table_buckets, hash_value & ((1ULL << table_buckets) - 1ULL) );
         DCHECK_EQ(inv_map(ret.first, ret.second, table_buckets), key);
         return ret;
     }
-    key_type inv_map(const key_type remainder, const size_t hash_value, const uint8_t table_buckets) const {
+    key_type inv_map(const storage_type remainder, const size_t hash_value, const uint8_t table_buckets) const {
         return func.hash_inv( (static_cast<uint64_t>(remainder) << table_buckets) + hash_value);
     }
 };

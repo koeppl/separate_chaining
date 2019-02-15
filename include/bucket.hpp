@@ -23,11 +23,11 @@ inline void* aligned_realloc(void*const ptr, const size_t oldsize, const size_t 
 }
 
 
-template<class key_t>
+template<class storage_t>
 struct avx_functions {
    public:
-   using key_type = key_t;
-   static __m256i load(key_type i);
+   using storage_type = storage_t;
+   static __m256i load(storage_type i);
    static __m256i compare(__m256i a, __m256i b);
 };
 
@@ -57,31 +57,31 @@ struct avx_functions<uint8_t> {
 
 
 
-template<class key_t>
-class avx2_key_bucket {
+template<class storage_t>
+class avx2_bucket {
     public:
-    using key_type = key_t;
+    using storage_type = storage_t;
     ON_DEBUG(size_t m_length;)
 
     private:
     static constexpr size_t m_alignment = 32;
-    key_type* m_keys = nullptr; //!bucket for keys
+    storage_type* m_data = nullptr; //!bucket for keys
 
     public:
-    bool initialized() const { return m_keys != nullptr; } //!check whether we can add elements to the bucket
+    bool initialized() const { return m_data != nullptr; } //!check whether we can add elements to the bucket
     void clear() {
-        if(m_keys != nullptr) {
-            _mm_free(m_keys);
+        if(m_data != nullptr) {
+            _mm_free(m_data);
         }
-        m_keys = nullptr;
+        m_data = nullptr;
         ON_DEBUG(m_length = 0;)
     }
 
-    avx2_key_bucket() = default;
+    avx2_bucket() = default;
 
     void initiate(const size_t size) {
-       DCHECK(m_keys == nullptr);
-        m_keys = reinterpret_cast<key_type*>  (_mm_malloc(sizeof(key_type)*size, m_alignment));
+       DCHECK(m_data == nullptr);
+        m_data = reinterpret_cast<storage_type*>  (_mm_malloc(sizeof(storage_type)*size, m_alignment));
         ON_DEBUG(m_length = size;)
     }
 
@@ -89,56 +89,56 @@ class avx2_key_bucket {
 
     void resize(const size_t oldsize, const size_t size, [[maybe_unused]] const size_t width) {
 
-        m_keys = reinterpret_cast<key_type*>  (aligned_realloc(m_keys, sizeof(key_type)*oldsize,  sizeof(key_type)*size, m_alignment));
+        m_data = reinterpret_cast<storage_type*>  (aligned_realloc(m_data, sizeof(storage_type)*oldsize,  sizeof(storage_type)*size, m_alignment));
         ON_DEBUG(m_length = size;)
     }
 
-    void write(const size_t i, const key_type& key, [[maybe_unused]] const uint_fast8_t width) {
+    void write(const size_t i, const storage_type& key, [[maybe_unused]] const uint_fast8_t width) {
         DCHECK_LT(i, m_length);
-        m_keys[i] = key;
+        m_data[i] = key;
     }
-    key_type read(size_t i, [[maybe_unused]]  size_t width) const {
+    storage_type read(size_t i, [[maybe_unused]]  size_t width) const {
         DCHECK_LT(i, m_length);
-        return m_keys[i];
+        return m_data[i];
     }
 
     size_t find(const uint64_t& key, const size_t length, [[maybe_unused]] const size_t width) const {
-     constexpr size_t register_size = 32/sizeof(key_type); // number of `key_type` elements fitting in 256 bits = 32 bytes
+     constexpr size_t register_size = 32/sizeof(storage_type); // number of `storage_type` elements fitting in 256 bits = 32 bytes
      if(length >= register_size) {
-        const __m256i pattern = avx_functions<key_type>::load(key);
-        // avx_key_bucket
+        const __m256i pattern = avx_functions<storage_type>::load(key);
+        // avx_bucket
         //TODO: avx2 __m256i _mm256_broadcastw_epi16 (__m128i a) and __m256i _mm256_cmpeq_epi8 (__m256i a, __m256i b)
         for(size_t i = 0; i < length/register_size; ++i) {
-           __m256i ma = _mm256_load_si256((__m256i*)(m_keys+i*register_size)); 
-           const unsigned int mask = _mm256_movemask_epi8(avx_functions<key_type>::compare(ma, pattern));
+           __m256i ma = _mm256_load_si256((__m256i*)(m_data+i*register_size)); 
+           const unsigned int mask = _mm256_movemask_epi8(avx_functions<storage_type>::compare(ma, pattern));
            if(mask == 0) { continue; }
            if(~mask == 0) { return i*register_size; }
            const size_t least_significant = __builtin_ctz(mask);
-           DCHECK_EQ(((least_significant)/sizeof(key_type))*sizeof(key_type), least_significant);
-           const size_t pos = (least_significant)/sizeof(key_type);
+           DCHECK_EQ(((least_significant)/sizeof(storage_type))*sizeof(storage_type), least_significant);
+           const size_t pos = (least_significant)/sizeof(storage_type);
            return i*register_size+pos;
         }
      }
     for(size_t i = (length/register_size)*register_size; i < length; ++i) {
-       if(m_keys[i] == key) return i;
+       if(m_data[i] == key) return i;
     }
     return -1ULL;
  }
 
 
-    ~avx2_key_bucket() { clear(); }
+    ~avx2_bucket() { clear(); }
 
-    avx2_key_bucket(avx2_key_bucket&& other) 
-        : m_keys(std::move(other.m_keys))
+    avx2_bucket(avx2_bucket&& other) 
+        : m_data(std::move(other.m_data))
     {
-        other.m_keys = nullptr;
+        other.m_data = nullptr;
         ON_DEBUG(m_length = other.m_length; other.m_length = 0;)
     }
 
-    avx2_key_bucket& operator=(avx2_key_bucket&& other) {
+    avx2_bucket& operator=(avx2_bucket&& other) {
         clear();
-        m_keys = std::move(other.m_keys);
-        other.m_keys = nullptr;
+        m_data = std::move(other.m_data);
+        other.m_data = nullptr;
         ON_DEBUG(m_length = other.m_length; other.m_length = 0;)
         return *this;
     }
@@ -150,41 +150,41 @@ class avx2_key_bucket {
 
 
 
-template<class key_t>
-class plain_key_bucket {
+template<class storage_t>
+class plain_bucket {
     public:
-    using key_type = key_t;
+    using storage_type = storage_t;
     ON_DEBUG(size_t m_length;)
 
     protected:
-    key_type* m_keys = nullptr; //!bucket for keys
+    storage_type* m_data = nullptr; //!bucket for keys
 
     public:
 
-    bool initialized() const { return m_keys != nullptr; } //!check whether we can add elements to the bucket
+    bool initialized() const { return m_data != nullptr; } //!check whether we can add elements to the bucket
 
     void clear() {
-        if(m_keys != nullptr) {
-            free(m_keys);
+        if(m_data != nullptr) {
+            free(m_data);
         }
-        m_keys = nullptr;
+        m_data = nullptr;
         ON_DEBUG(m_length = 0;)
     }
 
-    plain_key_bucket() = default;
+    plain_bucket() = default;
 
-    key_type& operator[](const size_t index) {
+    storage_type& operator[](const size_t index) {
         DCHECK_LT(index, m_length);
-        return m_keys[index];
+        return m_data[index];
     }
-    const key_type& operator[](const size_t index) const {
+    const storage_type& operator[](const size_t index) const {
         DCHECK_LT(index, m_length);
-        return m_keys[index];
+        return m_data[index];
     }
 
     void initiate(const size_t size) {
-       DCHECK(m_keys == nullptr);
-        m_keys = reinterpret_cast<key_type*>  (malloc(sizeof(key_type)*size));
+       DCHECK(m_data == nullptr);
+        m_data = reinterpret_cast<storage_type*>  (malloc(sizeof(storage_type)*size));
         ON_DEBUG(m_length = size;)
     }
 
@@ -194,9 +194,9 @@ class plain_key_bucket {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wclass-memaccess"
 #endif
-// this function creates warnings when key_type is a class wrapped around a POD
+// this function creates warnings when storage_type is a class wrapped around a POD
     void resize([[maybe_unused]] const size_t oldsize, const size_t size, [[maybe_unused]] const size_t width = 0) {
-        m_keys = reinterpret_cast<key_type*>  (realloc(m_keys, sizeof(key_type)*size));
+        m_data = reinterpret_cast<storage_type*>  (realloc(m_data, sizeof(storage_type)*size));
         ON_DEBUG(m_length = size;)
     }
 
@@ -205,148 +205,148 @@ class plain_key_bucket {
 #pragma GCC diagnostic pop
 #endif
 
-    void write(const size_t i, const key_type& key, [[maybe_unused]] const uint_fast8_t width) {
+    void write(const size_t i, const storage_type& key, [[maybe_unused]] const uint_fast8_t width) {
         DCHECK_LT(i, m_length);
-        m_keys[i] = key;
+        m_data[i] = key;
     }
-    key_type read(size_t i, [[maybe_unused]]  size_t width) const {
+    storage_type read(size_t i, [[maybe_unused]]  size_t width) const {
         DCHECK_LT(i, m_length);
-        return m_keys[i];
+        return m_data[i];
     }
-    size_t find(const key_type& key, const size_t length, [[maybe_unused]] const size_t width) const {
+    size_t find(const storage_type& key, const size_t length, [[maybe_unused]] const size_t width) const {
        for(size_t i = 0; i < length; ++i) {
-          if(m_keys[i] == key) return i;
+          if(m_data[i] == key) return i;
        }
        return -1ULL;
     }
 
-    ~plain_key_bucket() { clear(); }
+    ~plain_bucket() { clear(); }
 
-    plain_key_bucket(plain_key_bucket&& other) 
-        : m_keys(std::move(other.m_keys))
+    plain_bucket(plain_bucket&& other) 
+        : m_data(std::move(other.m_data))
     {
-        other.m_keys = nullptr;
-        ON_DEBUG(m_length = other.m_keys; other.m_keys = 0;)
+        other.m_data = nullptr;
+        ON_DEBUG(m_length = other.m_data; other.m_data = 0;)
     }
-    plain_key_bucket(key_type*&& keys) 
-        : m_keys(std::move(keys))
+    plain_bucket(storage_type*&& keys) 
+        : m_data(std::move(keys))
     {
         keys = nullptr;
     }
 
-    plain_key_bucket& operator=(plain_key_bucket&& other) {
+    plain_bucket& operator=(plain_bucket&& other) {
         clear();
-        m_keys = std::move(other.m_keys);
-        other.m_keys = nullptr;
+        m_data = std::move(other.m_data);
+        other.m_data = nullptr;
         ON_DEBUG(m_length = other.m_length; other.m_length = 0;)
         return *this;
     }
 };
 
-template<class key_t>
-class class_key_bucket : public plain_key_bucket<key_t> {
+template<class storage_t>
+class class_bucket : public plain_bucket<storage_t> {
     public:
-    using key_type = typename plain_key_bucket<key_t>::key_type;
-    using super_class = plain_key_bucket<key_t>;
+    using storage_type = typename plain_bucket<storage_t>::storage_type;
+    using super_class = plain_bucket<storage_t>;
 
     public:
 
     void clear() {
-        if(super_class::m_keys != nullptr) {
-           delete [] super_class::m_keys;
+        if(super_class::m_data != nullptr) {
+           delete [] super_class::m_data;
         }
-        super_class::m_keys = nullptr;
+        super_class::m_data = nullptr;
     }
 
-    class_key_bucket() = default;
+    class_bucket() = default;
 
     void initiate(const size_t size) {
-       DCHECK(super_class::m_keys == nullptr);
-       super_class::m_keys = new key_type[size];
+       DCHECK(super_class::m_data == nullptr);
+       super_class::m_data = new storage_type[size];
        ON_DEBUG(super_class::m_length = size);
     }
 
     void resize(const size_t oldsize, const size_t size, [[maybe_unused]] const size_t width = 0)  {
-       key_type* keys = new key_type[size];
+       storage_type* keys = new storage_type[size];
         for(size_t i = 0; i < oldsize; ++i) {
-            keys[i] = std::move(super_class::m_keys[i]);
+            keys[i] = std::move(super_class::m_data[i]);
         }
-        delete [] super_class::m_keys;
-        super_class::m_keys = keys;
+        delete [] super_class::m_data;
+        super_class::m_data = keys;
        ON_DEBUG(super_class::m_length = size);
     }
 
-    ~class_key_bucket() { clear(); }
+    ~class_bucket() { clear(); }
 
-    class_key_bucket(class_key_bucket&& other) 
-        : super_class(std::move(other.super_class::m_keys))
+    class_bucket(class_bucket&& other) 
+        : super_class(std::move(other.super_class::m_data))
     {
-        other.super_class::m_keys = nullptr;
+        other.super_class::m_data = nullptr;
         ON_DEBUG(super_class::m_length = other.m_length; other.m_length = 0;)
     }
 
-    class_key_bucket& operator=(class_key_bucket&& other) {
+    class_bucket& operator=(class_bucket&& other) {
         clear();
-        super_class::m_keys = std::move(other.m_keys);
-        other.m_keys = nullptr;
+        super_class::m_data = std::move(other.m_data);
+        other.m_data = nullptr;
         ON_DEBUG(super_class::m_length = other.m_length; other.m_length = 0;)
         return *this;
     }
 
 };
 
-class varwidth_key_bucket {
+class varwidth_bucket {
     public:
-    using key_type = uint64_t;
+    using storage_type = uint64_t;
     ON_DEBUG(size_t m_length;)
 
     private:
-    key_type* m_keys = nullptr; //!bucket for keys
+    storage_type* m_data = nullptr; //!bucket for keys
 
     public:
-    bool initialized() const { return m_keys != nullptr; } //!check whether we can add elements to the bucket
+    bool initialized() const { return m_data != nullptr; } //!check whether we can add elements to the bucket
     void clear() {
-        if(m_keys != nullptr) {
-            free(m_keys);
+        if(m_data != nullptr) {
+            free(m_data);
         }
-        m_keys = nullptr;
+        m_data = nullptr;
         ON_DEBUG(m_length = 0;)
     }
 
-    varwidth_key_bucket() = default;
+    varwidth_bucket() = default;
 
     void initiate(const size_t size) {
-       DCHECK(m_keys == nullptr);
-        m_keys = reinterpret_cast<key_type*>  (malloc(sizeof(key_type)*size));
+       DCHECK(m_data == nullptr);
+        m_data = reinterpret_cast<storage_type*>  (malloc(sizeof(storage_type)*size));
         ON_DEBUG(m_length = size;)
     }
 
     void resize(const size_t oldsize, const size_t size, const size_t width) {
        if(ceil_div<size_t>((oldsize)*width, 64) < ceil_div<size_t>((size)*width, 64)) {
-          m_keys = reinterpret_cast<key_type*>  (realloc(m_keys, sizeof(key_type)*ceil_div<size_t>(size*width, 64) ));
+          m_data = reinterpret_cast<storage_type*>  (realloc(m_data, sizeof(storage_type)*ceil_div<size_t>(size*width, 64) ));
        }
        ON_DEBUG(m_length = size;)
     }
 
-    void write(const size_t i, const key_type& key, const uint_fast8_t width) {
+    void write(const size_t i, const storage_type& key, const uint_fast8_t width) {
         DCHECK_LT((static_cast<size_t>(i)*width)/64 + ((i)* width) % 64, 64*ceil_div<size_t>(m_length*width, 64) );
         DCHECK_LE(most_significant_bit(key), width);
 
-        tdc::tdc_sdsl::bits_impl<>::write_int(m_keys + (static_cast<size_t>(i)*width)/64, key, ((i)* width) % 64, width);
-        DCHECK_EQ(tdc::tdc_sdsl::bits_impl<>::read_int(m_keys + (static_cast<size_t>(i)*width)/64, ((i)* width) % 64, width), key);
+        tdc::tdc_sdsl::bits_impl<>::write_int(m_data + (static_cast<size_t>(i)*width)/64, key, ((i)* width) % 64, width);
+        DCHECK_EQ(tdc::tdc_sdsl::bits_impl<>::read_int(m_data + (static_cast<size_t>(i)*width)/64, ((i)* width) % 64, width), key);
     }
-    key_type read(size_t i, size_t width) const {
+    storage_type read(size_t i, size_t width) const {
         DCHECK_LT((static_cast<size_t>(i)*width)/64 + ((i)* width) % 64, 64*ceil_div<size_t>(m_length*width, 64) );
-        return tdc::tdc_sdsl::bits_impl<>::read_int(m_keys + (static_cast<size_t>(i)*width)/64, ((i)* width) % 64, width);
+        return tdc::tdc_sdsl::bits_impl<>::read_int(m_data + (static_cast<size_t>(i)*width)/64, ((i)* width) % 64, width);
     }
 
-    size_t find(const key_type& key, const size_t length, const size_t width) const {
+    size_t find(const storage_type& key, const size_t length, const size_t width) const {
        DCHECK_LE(length, m_length);
        uint8_t offset = 0;
-       const key_type* it = m_keys;
+       const storage_type* it = m_data;
 
        for(size_t i = 0; i < length; ++i) { // needed?
-            const key_type read_key = tdc::tdc_sdsl::bits_impl<>::read_int_and_move(it, offset, width);
+            const storage_type read_key = tdc::tdc_sdsl::bits_impl<>::read_int_and_move(it, offset, width);
             //DCHECK_EQ(read_key , bucket_plainkeys[i]);
             if(read_key == key) {
                 return i;
@@ -356,19 +356,19 @@ class varwidth_key_bucket {
     }
 
 
-    ~varwidth_key_bucket() { clear(); }
+    ~varwidth_bucket() { clear(); }
 
-    varwidth_key_bucket(varwidth_key_bucket&& other) 
-        : m_keys(std::move(other.m_keys))
+    varwidth_bucket(varwidth_bucket&& other) 
+        : m_data(std::move(other.m_data))
     {
-        other.m_keys = nullptr;
+        other.m_data = nullptr;
         ON_DEBUG(m_length = other.m_length; other.m_length = 0;)
     }
 
-    varwidth_key_bucket& operator=(varwidth_key_bucket&& other) {
+    varwidth_bucket& operator=(varwidth_bucket&& other) {
         clear();
-        m_keys = std::move(other.m_keys);
-        other.m_keys = nullptr;
+        m_data = std::move(other.m_data);
+        other.m_data = nullptr;
         ON_DEBUG(m_length = other.m_length; other.m_length = 0;)
         return *this;
     }

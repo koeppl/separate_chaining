@@ -13,7 +13,7 @@
 
 namespace separate_chaining {
 
-    namespace chaining_bucket_types {
+    namespace bucket_table_types {
         using bucketsize_type = uint32_t; //! used for storing the sizes of the buckets
     }
 
@@ -24,7 +24,7 @@ class arbitrary_resize_bucket {
 
     public:
     static constexpr size_t INITIAL_BUCKET_SIZE = 1; //! number of elements a bucket can store initially
-    using bucketsize_type = chaining_bucket_types::bucketsize_type; //! used for storing the sizes of the buckets
+    using bucketsize_type = bucket_table_types::bucketsize_type; //! used for storing the sizes of the buckets
 
     private:
     bucketsize_type m_length = 0; //! size of the bucket
@@ -47,18 +47,18 @@ class arbitrary_resize_bucket {
 };
 
 template<class hash_map>
-    class chaining_bucket_navigator {
+    class bucket_table_navigator {
     public:
         using key_type = typename hash_map::key_type;
         using value_type = typename hash_map::value_type;
-        using class_type = chaining_bucket_navigator<hash_map>;
+        using class_type = bucket_table_navigator<hash_map>;
 
         //private:
         hash_map& m_map;
         size_t m_position;
 
     public:
-        chaining_bucket_navigator(hash_map& map, const size_t position) 
+        bucket_table_navigator(hash_map& map, const size_t position) 
             : m_map(map), m_position(position) {
             }
 
@@ -89,25 +89,25 @@ template<class hash_map>
         }
 
         template<class U>
-        bool operator!=(const chaining_bucket_navigator<U>& o) const {
+        bool operator!=(const bucket_table_navigator<U>& o) const {
             return !( (*this)  == o);
         }
 
         template<class U>
-        bool operator==(const chaining_bucket_navigator<U>& o) const {
+        bool operator==(const bucket_table_navigator<U>& o) const {
           if(!o.invalid() && !invalid()) return o.m_position == m_position; // compare positions
           return o.invalid() == invalid();
         }
 };
 
 template<class hash_map>
-    class chaining_bucket_iterator : public chaining_bucket_navigator<hash_map> {
+    class bucket_table_iterator : public bucket_table_navigator<hash_map> {
     public:
         using key_type = typename hash_map::key_type;
         using value_type = typename hash_map::value_type;
         using pair_type = std::pair<key_type, value_type>;
-        using class_type = chaining_bucket_iterator<hash_map>;
-        using super_type = chaining_bucket_navigator<hash_map>;
+        using class_type = bucket_table_iterator<hash_map>;
+        using super_type = bucket_table_navigator<hash_map>;
 
         //private:
         pair_type m_pair;
@@ -119,7 +119,7 @@ template<class hash_map>
         }
 
     public:
-        chaining_bucket_iterator(hash_map& map, const size_t position) 
+        bucket_table_iterator(hash_map& map, const size_t position) 
             : super_type(map, position) {
                 if(!super_type::invalid()) { update(); }
             }
@@ -139,35 +139,35 @@ template<class hash_map>
             return &m_pair;
         }
         template<class U>
-        bool operator!=(const chaining_bucket_iterator<U>& o) const {
+        bool operator!=(const bucket_table_iterator<U>& o) const {
             return !( (*this)  == o);
         }
 
         template<class U>
-        bool operator==(const chaining_bucket_iterator<U>& o) const {
+        bool operator==(const bucket_table_iterator<U>& o) const {
           return super_type::operator==(o);
         }
 };
 
 
 template<class key_bucket_t, class value_bucket_t, class resize_strategy_t>
-class chaining_bucket {
+class bucket_table {
     public:
     using key_bucket_type = key_bucket_t;
     using value_bucket_type = value_bucket_t;
 
     using resize_strategy_type = resize_strategy_t; //! how large a buckets becomes resized
 
-    using key_type = typename key_bucket_type::key_type;
-    using value_type = typename value_bucket_type::key_type;
+    using key_type = typename key_bucket_type::storage_type;
+    using value_type = typename value_bucket_type::storage_type;
 
-    using bucketsize_type = chaining_bucket_types::bucketsize_type; //! used for storing the sizes of the buckets
+    using bucketsize_type = bucket_table_types::bucketsize_type; //! used for storing the sizes of the buckets
     using size_type = uint64_t; //! used for addressing the i-th bucket
-    using class_type = chaining_bucket<key_bucket_type, value_bucket_type, resize_strategy_type>;
-    using iterator = chaining_bucket_iterator<class_type>;
-    using const_iterator = chaining_bucket_iterator<const class_type>;
-    using navigator = chaining_bucket_navigator<class_type>;
-    using const_navigator = chaining_bucket_navigator<const class_type>;
+    using class_type = bucket_table<key_bucket_type, value_bucket_type, resize_strategy_type>;
+    using iterator = bucket_table_iterator<class_type>;
+    using const_iterator = bucket_table_iterator<const class_type>;
+    using navigator = bucket_table_navigator<class_type>;
+    using const_navigator = bucket_table_navigator<const class_type>;
 
     ON_DEBUG(key_type* m_plainkeys = nullptr;) //!bucket for keys in plain format for debugging purposes
 
@@ -227,13 +227,13 @@ class chaining_bucket {
         return ret;
     }
 
-    chaining_bucket(size_t width = sizeof(key_type)*8) 
+    bucket_table(size_t width = sizeof(key_type)*8) 
         : m_width(width)
     {
         DCHECK_LE(width, sizeof(key_type)*8);
     }
 
-    chaining_bucket(chaining_bucket&& other)
+    bucket_table(bucket_table&& other)
        : m_width(other.width)
        , m_keys(std::move(other.m_keys))
        , m_values(std::move(other.m_values))
@@ -245,7 +245,7 @@ class chaining_bucket {
         other.m_elements = 0; 
     }
 
-    chaining_bucket& operator=(chaining_bucket&& other) {
+    bucket_table& operator=(bucket_table&& other) {
         DCHECK_EQ(m_width, other.m_width);
         clear();
         m_keys        = std::move(other.m_keys);
@@ -256,7 +256,7 @@ class chaining_bucket {
         other.m_elements  = 0;
         return *this;
     }
-    void swap(chaining_bucket& other) {
+    void swap(bucket_table& other) {
         DCHECK_EQ(m_width, other.m_width);
         ON_DEBUG(std::swap(m_plainkeys, other.m_plainkeys);)
 
@@ -380,7 +380,7 @@ class chaining_bucket {
         return find_or_insert(key, value_type()).value_ref();
     }
 
-    ~chaining_bucket() { clear(); }
+    ~bucket_table() { clear(); }
 
     /** @see std::set **/
     size_type count(const key_type& key ) const {
@@ -411,4 +411,4 @@ class chaining_bucket {
 };
 
 
-}//ns chaining_bucket
+}//ns bucket_table
