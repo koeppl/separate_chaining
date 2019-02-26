@@ -8,7 +8,7 @@
 #include <separate/bucket_table.hpp>
 
 using namespace separate_chaining;
-using bijective_hash = poplar::bijective_hash::Xorshift;
+using bijective_hash = bijective_hash::Xorshift;
 
 
 #define COMMA ,

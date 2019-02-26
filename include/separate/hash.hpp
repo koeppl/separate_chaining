@@ -47,7 +47,7 @@ class xorshift_hash {
     using storage_type = storage_t;
 
     private:
-    poplar::bijective_hash::Xorshift func;
+    bijective_hash::Xorshift func;
 
     public:
     xorshift_hash(const uint_fast8_t width) : func(width) { }

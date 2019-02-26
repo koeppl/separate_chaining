@@ -86,6 +86,8 @@ The class `bucket_table` wraps a single bucket in a map/set interface.
 - If you want to process and delete processed elements like you would do with a stack or queue, start at `rbegin_nav` and end at `rend_nav`, using decremental operation on the navigator object.
 
 
+## Caveats
+- You cannot use an `avx2_bucket` with overloaded `malloc`/`free`.
 
 ## Dependencies
 

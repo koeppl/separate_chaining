@@ -83,6 +83,9 @@ class avx2_bucket {
        DCHECK(m_data == nullptr);
         m_data = reinterpret_cast<storage_type*>  (_mm_malloc(sizeof(storage_type)*size, m_alignment));
         ON_DEBUG(m_length = size;)
+#ifdef STATS_ENABLED
+       throw std::runtime_error("Cannot use tudocomp stats in conjuction with avx2");
+#endif
     }
 
 

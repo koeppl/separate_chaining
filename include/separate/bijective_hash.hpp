@@ -4,7 +4,7 @@
 
 // Source: https://github.com/kampersanda/poplar-trie/blob/master/include/poplar/bijective_hash.hpp
 //
-namespace poplar{namespace bijective_hash {
+namespace separate_chaining { namespace bijective_hash {
 
 class size_p2_t {
 public:
