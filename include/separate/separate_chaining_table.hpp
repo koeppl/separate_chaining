@@ -274,6 +274,7 @@ class separate_chaining_table {
     using storage_type = typename hash_mapping_t::storage_type;
     using key_type = typename hash_mapping_t::key_type;
     static_assert(std::is_same<typename hash_mapping_t::storage_type, typename key_bucket_type::storage_type>::value, "hash_mapping_t::storage_type and key_bucket_type::key_type must be the same!");
+
     using value_type = typename value_bucket_type::storage_type;
     // static_assert(std::is_same<key_type, typename hash_mapping_t::key_type>::value, "key types of bucket and hash_mapping mismatch!") ;
     static_assert(std::numeric_limits<key_type>::max() <= std::numeric_limits<typename hash_mapping_t::key_type>::max(), "key types of bucket must have at most as many bits as key type of hash_mapping!") ;
@@ -300,7 +301,7 @@ class separate_chaining_table {
 
     size_t m_buckets = 0; //! log_2 of the number of buckets
     size_t m_elements = 0; //! number of stored elements
-    const uint_fast8_t m_width;
+    uint_fast8_t m_width;
     hash_mapping_type m_hash; //! hash function
 
 
@@ -423,7 +424,7 @@ class separate_chaining_table {
     }
 
     separate_chaining_table(separate_chaining_table&& other)
-       : m_width(other.width)
+       : m_width(other.m_width)
        , m_keys(std::move(other.m_keys))
        , m_value_manager(std::move(other.m_value_manager))
        , m_bucketsizes(std::move(other.m_bucketsizes))
@@ -438,8 +439,9 @@ class separate_chaining_table {
     }
 
     separate_chaining_table& operator=(separate_chaining_table&& other) {
-        DCHECK_EQ(m_width, other.m_width);
+        // DCHECK_EQ(m_width, other.m_width);
         clear();
+        m_width       = std::move(other.m_width);
         m_keys        = std::move(other.m_keys);
         m_value_manager      = std::move(other.m_value_manager);
         m_buckets     = std::move(other.m_buckets);
@@ -452,9 +454,10 @@ class separate_chaining_table {
         return *this;
     }
     void swap(separate_chaining_table& other) {
-        DCHECK_EQ(m_width, other.m_width);
+        // DCHECK_EQ(m_width, other.m_width);
         ON_DEBUG(std::swap(m_plainkeys, other.m_plainkeys);)
 
+        std::swap(m_width, other.m_width);
         std::swap(m_keys, other.m_keys);
         std::swap(m_value_manager, other.m_value_manager);
         std::swap(m_buckets, other.m_buckets);

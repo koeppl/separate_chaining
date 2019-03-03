@@ -22,6 +22,7 @@ inline void* aligned_realloc(void*const ptr, const size_t oldsize, const size_t 
    return newptr;
 }
 
+#ifdef __AVX2__
 
 template<class storage_t>
 struct avx_functions {
@@ -83,7 +84,7 @@ class avx2_bucket {
        DCHECK(m_data == nullptr);
         m_data = reinterpret_cast<storage_type*>  (_mm_malloc(sizeof(storage_type)*size, m_alignment));
         ON_DEBUG(m_length = size;)
-#ifdef STATS_ENABLED
+#if defined(STATS_ENABLED) && !defined(MALLOC_DISABLED)
        throw std::runtime_error("Cannot use tudocomp stats in conjuction with avx2");
 #endif
     }
@@ -149,6 +150,7 @@ class avx2_bucket {
 };
 
 
+#endif// __AVX2__
 
 
 

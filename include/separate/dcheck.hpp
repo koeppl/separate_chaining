@@ -24,6 +24,16 @@
 #define ON_DEBUG(x) x
 #endif
 
+#ifdef DCHECK
+#undef DCHECK
+#undef DCHECK_EQ
+#undef DCHECK_NE
+#undef DCHECK_LE
+#undef DCHECK_LT
+#undef DCHECK_GE
+#undef DCHECK_GT
+#endif
+
 #ifndef DCHECK
 #ifdef NDEBUG
 #define DCHECK_(x,y,z)
