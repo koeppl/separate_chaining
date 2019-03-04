@@ -174,6 +174,9 @@ class null_value_bucket {
     constexpr void resize([[maybe_unused]] const size_t oldsize, [[maybe_unused]] const size_t size) {}
     null_value_bucket(null_value_bucket&&) {}
     null_value_bucket() = default;
+    static constexpr void deserialize([[maybe_unused]] std::istream& is, [[maybe_unused]] const size_t length, [[maybe_unused]] const uint_fast8_t width) { }
+
+    static constexpr void serialize([[maybe_unused]] std::ostream& os, [[maybe_unused]] const size_t length, [[maybe_unused]] const uint_fast8_t width) { }
 };
 
 
@@ -299,7 +302,7 @@ class separate_chaining_table {
     value_manager_type m_value_manager;
     bucketsize_type* m_bucketsizes = nullptr; //! size of each bucket
 
-    size_t m_buckets = 0; //! log_2 of the number of buckets
+    uint_fast8_t m_buckets = 0; //! log_2 of the number of buckets
     size_t m_elements = 0; //! number of stored elements
     uint_fast8_t m_width;
     hash_mapping_type m_hash; //! hash function
@@ -407,7 +410,7 @@ class separate_chaining_table {
         return 1ULL<<m_buckets;
     }
 
-    size_type bucket_count_log2() const {
+    uint_fast8_t bucket_count_log2() const {
         return m_buckets;
     }
 
@@ -488,7 +491,7 @@ class separate_chaining_table {
 
     //! Allocate `reserve` buckets. Do not confuse with reserving space for `reserve` elements.
     void reserve(size_t reserve) {
-        size_t reserve_bits = most_significant_bit(reserve);
+        uint_fast8_t reserve_bits = most_significant_bit(reserve);
         if(1ULL<<reserve_bits != reserve) ++reserve_bits;
         const size_t new_size = 1ULL<<reserve_bits;
 
@@ -510,10 +513,9 @@ class separate_chaining_table {
             print_stats(statphase);
 #endif
             const size_t cbucket_count = bucket_count();
+            const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
             for(size_t bucket = 0; bucket < cbucket_count; ++bucket) {
                 if(m_bucketsizes[bucket] == 0) continue;
-
-                const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
                 const key_bucket_type& bucket_keys_it = m_keys[bucket];
                 for(size_t i = 0; i < m_bucketsizes[bucket]; ++i) {
                     const storage_type read_quotient = bucket_keys_it.read(i, key_bitwidth);
@@ -708,58 +710,6 @@ class separate_chaining_table {
 
     value_type& operator[](const key_type& key) {
         return find_or_insert(key, value_type()).value_ref();
-    //     if(m_buckets == 0) reserve(separate_chaining::INITIAL_BUCKETS);
-    //     const auto [quotient, bucket] = m_hash.map(key, m_buckets);
-    //     DCHECK_EQ(m_hash.inv_map(quotient, bucket, m_buckets), key);
-    //
-    //     bucketsize_type& bucket_size = m_bucketsizes[bucket];
-    //     const size_t position = locate(bucket, quotient);
-    //
-    //     value_bucket_type& bucket_values = m_value_manager[bucket];
-    //     if(position != static_cast<size_t>(-1ULL)) {
-    //         DCHECK_LT(position, bucket_size);
-    //         return bucket_values[position];
-    //     }
-    //
-    //
-    //     if(bucket_size == max_bucket_size()) {
-    //         // if(m_elements*separate_chaining::FAIL_PERCENTAGE < max_size()) {
-    //         //     throw std::runtime_error("The chosen hash function is bad!");
-    //         // }
-    //         reserve(1ULL<<(m_buckets+1));
-    //         return operator[](key);
-    //     }
-    //     ++m_elements;
-    //
-    //     key_bucket_type& bucket_keys = m_keys[bucket];
-    //     ON_DEBUG(key_type*& bucket_plainkeys = m_plainkeys[bucket];)
-    //     const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
-    //
-    //     if(bucket_size == 0) {
-    //         bucket_size = 1;
-    //         ON_DEBUG(bucket_plainkeys   = reinterpret_cast<key_type*>  (malloc(sizeof(key_type))));
-    //         bucket_keys.initiate(resize_strategy_type::INITIAL_BUCKET_SIZE);
-    //         bucket_values.initiate(resize_strategy_type::INITIAL_BUCKET_SIZE);
-    //         m_resize_strategy.assign(resize_strategy_type::INITIAL_BUCKET_SIZE, bucket);
-    //     } else {
-    //         ++bucket_size;
-    //         ON_DEBUG(bucket_plainkeys   = reinterpret_cast<key_type*>  (realloc(bucket_plainkeys, sizeof(key_type)*bucket_size));)
-    //
-    //         if(m_resize_strategy.needs_resize(bucket_size, bucket)) {
-    //             const size_t newsize = m_resize_strategy.size_after_increment(bucket_size, bucket);
-    //             bucket_keys.resize(bucket_size-1, newsize, key_bitwidth);
-    //             bucket_values.resize(bucket_size-1, newsize);
-    //         }
-    //     }
-    //     DCHECK_LE(key, max_key());
-    //     ON_DEBUG(bucket_plainkeys[bucket_size-1] = key;)
-    //     
-    //     DCHECK_LT((static_cast<size_t>(bucket_size-1)*key_bitwidth)/64 + ((bucket_size-1)* key_bitwidth) % 64, 64*ceil_div<size_t>(bucket_size*key_bitwidth, 64) );
-    //
-    //     bucket_keys.write(bucket_size-1, quotient, key_bitwidth);
-    //     DCHECK_EQ(m_hash.inv_map(bucket_keys.read(bucket_size-1, key_bitwidth), bucket, m_buckets), key);
-    //
-    //     return bucket_values[bucket_size-1];
     }
 
     ~separate_chaining_table() { clear(); }
@@ -824,6 +774,75 @@ class separate_chaining_table {
             bytes += m_value_manager.value_width() *(m_bucketsizes[bucket]);
         }
         return bytes; 
+    }
+
+    void serialize(std::stringstream& os) {
+        os.write(reinterpret_cast<const char*>(&m_width), sizeof(decltype(m_width)));
+        os.write(reinterpret_cast<const char*>(&m_buckets), sizeof(decltype(m_buckets)));
+        os.write(reinterpret_cast<const char*>(&m_elements), sizeof(decltype(m_elements)));
+        const size_t cbucket_count = bucket_count();
+        const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
+
+        os.write(reinterpret_cast<const char*>(m_bucketsizes), sizeof(bucketsize_type) * cbucket_count);
+
+
+        for(size_t bucket = 0; bucket < cbucket_count; ++bucket) {
+            if(m_bucketsizes[bucket] == 0) continue;
+            m_keys[bucket].serialize(os, m_bucketsizes[bucket], key_bitwidth); 
+            m_value_manager[bucket].serialize(os, m_bucketsizes[bucket], key_bitwidth); 
+            ON_DEBUG(os.write(reinterpret_cast<const char*>(m_plainkeys[bucket]), sizeof(key_type)*m_bucketsizes[bucket]));
+        }
+        // {
+        //     os.seekg(0);
+        //     decltype(m_width) width;
+        //     decltype(m_buckets) buckets;
+        //     decltype(m_elements) elements;
+        //     os >> width;
+        //     os >> buckets;
+        //     os >> elements;
+        //     DCHECK_EQ(m_width, width);
+        //     DCHECK_EQ(m_buckets, buckets);
+        //     DCHECK_EQ(m_elements, elements);
+        // }
+    }
+    void deserialize(std::istream& is) {
+        clear();
+        decltype(m_buckets) buckets;
+        is.read(reinterpret_cast<char*>(&m_width), sizeof(decltype(m_width)));
+        m_hash = hash_mapping_type(m_width);
+        is.read(reinterpret_cast<char*>(&buckets), sizeof(decltype(buckets)));
+        reserve(1ULL<<buckets);
+        DCHECK_EQ(m_buckets, buckets);
+        is.read(reinterpret_cast<char*>(&m_elements), sizeof(decltype(m_elements)));
+
+        ON_DEBUG(size_t restored_elements = 0;)
+        const size_t cbucket_count = bucket_count();
+        const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
+
+        is.read(reinterpret_cast<char*>(m_bucketsizes), sizeof(bucketsize_type) * cbucket_count);
+
+        for(size_t bucket = 0; bucket < cbucket_count; ++bucket) {
+            if(m_bucketsizes[bucket] == 0) continue;
+            m_keys[bucket].deserialize(is, m_bucketsizes[bucket], key_bitwidth); 
+            m_value_manager[bucket].deserialize(is, m_bucketsizes[bucket], key_bitwidth); 
+#ifndef NDEBUG
+            {
+                const auto bucket_size = m_bucketsizes[bucket];
+                key_type*& bucket_plainkeys = m_plainkeys[bucket];
+                bucket_plainkeys = reinterpret_cast<key_type*>  (realloc(bucket_plainkeys, sizeof(key_type)*bucket_size));
+                is.read(reinterpret_cast<char*>(bucket_plainkeys), sizeof(key_type)*m_bucketsizes[bucket]);
+                restored_elements += m_bucketsizes[bucket];
+                const key_bucket_type& bucket_keys = m_keys[bucket];
+                for(size_t i = 0; i < bucket_size; ++i) { 
+                    const key_type read_quotient = bucket_keys.read(i, key_bitwidth);
+                    const key_type read_key = m_hash.inv_map(read_quotient, bucket, m_buckets);
+                    DCHECK_EQ(read_key, bucket_plainkeys[i]);
+                }
+            }
+#endif//NDEBUG
+
+        }
+        DCHECK_EQ(m_elements, restored_elements);
     }
 
 };

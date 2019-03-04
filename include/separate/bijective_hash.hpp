@@ -6,23 +6,6 @@
 //
 namespace separate_chaining { namespace bijective_hash {
 
-class size_p2_t {
-public:
-  size_p2_t(uint_fast8_t bits)
-    : m_bits{bits}, m_mask{-1ULL >> (64-bits)} {
-      DCHECK_LT(0, bits);
-      DCHECK_LE(bits, 64);
-      DCHECK_LT(0, mask());
-    }
-
-  uint_fast8_t bits() const { return m_bits; }
-  uint64_t mask() const { return m_mask; }
-
-private:
-  uint_fast8_t m_bits;
-  uint64_t m_mask;
-};
-
 // (p, q): p < 2**w is a prime and q < 2**w is an integer such that pq mod m = 1
 constexpr uint64_t PRIME_TABLE[][2][3] = {
   {{0ULL, 0ULL, 0ULL}, {0ULL, 0ULL, 0ULL}}, // 0
@@ -97,14 +80,17 @@ public:
   // Xorshift() = default;
 
   Xorshift(uint_fast8_t univ_bits) 
-    : m_univ_size(univ_bits)
+    : m_bits(univ_bits)
     , m_shift(univ_bits / 2 + 1)
   {
+      DCHECK_LT(0, m_bits);
+      DCHECK_LE(m_bits, 64);
+      DCHECK_LT(0, mask());
   }
   uint64_t operator()(uint64_t x) const { return hash(x); }
 
   uint64_t hash(uint64_t x) const {
-    DCHECK_LE(x, m_univ_size.mask());
+    DCHECK_LE(x, mask());
     x = hash_<0>(x);
     x = hash_<1>(x);
     x = hash_<2>(x);
@@ -112,19 +98,11 @@ public:
   }
 
   uint64_t hash_inv(uint64_t x) const {
-    DCHECK_LE(x, m_univ_size.mask());
+    DCHECK_LE(x, mask());
     x = hash_inv_<2>(x);
     x = hash_inv_<1>(x);
     x = hash_inv_<0>(x);
     return x;
-  }
-
-  uint64_t mask() const {
-    return m_univ_size.mask();
-  }
-
-  uint64_t bits() const {
-    return m_univ_size.bits();
   }
 
   void show_stat(std::ostream& os) const {
@@ -132,21 +110,24 @@ public:
     os << " - mask: " << mask() << "\n";
     os << " - bits: " << bits() << "\n";
   }
+  uint_fast8_t bits() const { return m_bits; }
+  uint64_t mask() const { return (-1ULL >> (64-m_bits)); }
 
 private:
-  size_p2_t m_univ_size;
+  uint_fast8_t m_bits;
   uint_fast8_t m_shift;
+
 
   template <uint_fast8_t N>
   uint64_t hash_(uint64_t x) const {
     DCHECK_LE(x, mask());
     x = x ^ (x >> (m_shift + N));
-    x = (x * PRIME_TABLE[m_univ_size.bits()][0][N]) & m_univ_size.mask();
+    x = (x * PRIME_TABLE[bits()][0][N]) & mask();
     return x;
   }
   template <uint_fast8_t N>
   uint64_t hash_inv_(uint64_t x) const {
-    x = (x * PRIME_TABLE[m_univ_size.bits()][1][N]) & m_univ_size.mask();
+    x = (x * PRIME_TABLE[bits()][1][N]) & mask();
     x = x ^ (x >> (m_shift + N));
     return x;
   }

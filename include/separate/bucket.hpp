@@ -18,6 +18,7 @@ inline void* aligned_realloc(void*const ptr, const size_t oldsize, const size_t 
    for(size_t i = (oldsize/sizeof(uint64_t))*sizeof(uint64_t); i < oldsize; ++i) {
       reinterpret_cast<uint8_t*>(newptr)[i] = reinterpret_cast<const uint8_t*>(ptr)[i];
    }
+   DCHECK(ptr != nullptr);
    _mm_free(ptr);
    return newptr;
 }
@@ -89,6 +90,22 @@ class avx2_bucket {
 #endif
     }
 
+    void deserialize(std::istream& is, const size_t size, [[maybe_unused]] const uint_fast8_t width) {
+       ON_DEBUG(is.read(reinterpret_cast<char*>(&m_length), sizeof(decltype(m_length))));
+       DCHECK_LE(size, m_length);
+       initiate(size);
+       is.read(reinterpret_cast<char*>(m_data), sizeof(storage_type)*size);
+    }
+    void serialize(std::ostream& os, const size_t size, [[maybe_unused]] const uint_fast8_t width) const {
+       ON_DEBUG(os.write(reinterpret_cast<const char*>(&m_length), sizeof(decltype(m_length))));
+       DCHECK_LE(size, m_length);
+       os.write(reinterpret_cast<const char*>(m_data), sizeof(storage_type)*size);
+    }
+    static constexpr size_t size_in_bytes(const size_t size, [[maybe_unused]] const size_t width = 0) {
+       ON_DEBUG(return size*sizeof(storage_type) + sizeof(m_length));
+       return size*sizeof(storage_type);
+    }
+
 
 
     void resize(const size_t oldsize, const size_t size, [[maybe_unused]] const size_t width) {
@@ -155,6 +172,9 @@ class avx2_bucket {
 
 
 
+
+
+
 template<class storage_t>
 class plain_bucket {
     public:
@@ -165,6 +185,23 @@ class plain_bucket {
     storage_type* m_data = nullptr; //!bucket for keys
 
     public:
+
+    void deserialize(std::istream& is, const size_t size, [[maybe_unused]] const uint_fast8_t width) {
+       ON_DEBUG(is.read(reinterpret_cast<char*>(&m_length), sizeof(decltype(m_length))));
+       DCHECK_LE(size, m_length);
+       initiate(size);
+       is.read(reinterpret_cast<char*>(m_data), sizeof(storage_type)*size);
+    }
+    void serialize(std::ostream& os, const size_t size, [[maybe_unused]] const uint_fast8_t width) const {
+       ON_DEBUG(os.write(reinterpret_cast<const char*>(&m_length), sizeof(decltype(m_length))));
+       DCHECK_LE(size, m_length);
+       os.write(reinterpret_cast<const char*>(m_data), sizeof(storage_type)*size);
+    }
+    static constexpr size_t size_in_bytes(const size_t size, [[maybe_unused]] const size_t width = 0) {
+       ON_DEBUG(return size*sizeof(storage_type) + sizeof(m_length));
+       return size*sizeof(storage_type);
+    }
+
 
     bool initialized() const { return m_data != nullptr; } //!check whether we can add elements to the bucket
 
@@ -273,11 +310,12 @@ class class_bucket : public plain_bucket<storage_t> {
 
     void resize(const size_t oldsize, const size_t size, [[maybe_unused]] const size_t width = 0)  {
        storage_type* keys = new storage_type[size];
-        for(size_t i = 0; i < oldsize; ++i) {
-            keys[i] = std::move(super_class::m_data[i]);
-        }
-        delete [] super_class::m_data;
-        super_class::m_data = keys;
+       for(size_t i = 0; i < oldsize; ++i) {
+          keys[i] = std::move(super_class::m_data[i]);
+       }
+       DCHECK(super_class::m_data != nullptr);
+       delete [] super_class::m_data;
+       super_class::m_data = keys;
        ON_DEBUG(super_class::m_length = size);
     }
 
@@ -303,12 +341,33 @@ class class_bucket : public plain_bucket<storage_t> {
 class varwidth_bucket {
     public:
     using storage_type = uint64_t;
+    static constexpr uint_fast8_t storage_bitwidth = sizeof(storage_type)*8;
     ON_DEBUG(size_t m_length;)
 
     private:
     storage_type* m_data = nullptr; //!bucket for keys
 
     public:
+
+    void deserialize(std::istream& is, const size_t size, [[maybe_unused]] const uint_fast8_t width) {
+       ON_DEBUG(is.read(reinterpret_cast<char*>(&m_length), sizeof(decltype(m_length))));
+       DCHECK_LE(size, m_length);
+       const size_t read_length = ceil_div<size_t>(size*width, storage_bitwidth);
+       m_data = reinterpret_cast<storage_type*>  (malloc(sizeof(storage_type)*read_length));
+       is.read(reinterpret_cast<char*>(m_data), sizeof(storage_type)*read_length);
+    }
+    void serialize(std::ostream& os, const size_t size, [[maybe_unused]] const uint_fast8_t width) const {
+       ON_DEBUG(os.write(reinterpret_cast<const char*>(&m_length), sizeof(decltype(m_length))));
+       DCHECK_LE(size, m_length);
+       const size_t write_length = ceil_div<size_t>(size*width, storage_bitwidth);
+       os.write(reinterpret_cast<const char*>(m_data), sizeof(storage_type)*write_length);
+    }
+    static constexpr size_t size_in_bytes(const size_t size, [[maybe_unused]] const size_t width = 0) {
+       ON_DEBUG(return size*sizeof(storage_type) + sizeof(m_length));
+       const size_t length = ceil_div<size_t>(size*width, storage_bitwidth);
+       return length*sizeof(storage_type);
+    }
+
     bool initialized() const { return m_data != nullptr; } //!check whether we can add elements to the bucket
     void clear() {
         if(m_data != nullptr) {
@@ -320,29 +379,29 @@ class varwidth_bucket {
 
     varwidth_bucket() = default;
 
-    void initiate(const size_t size) {
+    void initiate(const size_t size) { //!TODO: this size is here not the number of elements. Add `width` parameter here!
        DCHECK(m_data == nullptr);
         m_data = reinterpret_cast<storage_type*>  (malloc(sizeof(storage_type)*size));
         ON_DEBUG(m_length = size;)
     }
 
     void resize(const size_t oldsize, const size_t size, const size_t width) {
-       if(ceil_div<size_t>((oldsize)*width, 64) < ceil_div<size_t>((size)*width, 64)) {
-          m_data = reinterpret_cast<storage_type*>  (realloc(m_data, sizeof(storage_type)*ceil_div<size_t>(size*width, 64) ));
+       if(ceil_div<size_t>((oldsize)*width, storage_bitwidth) < ceil_div<size_t>((size)*width, storage_bitwidth)) {
+          m_data = reinterpret_cast<storage_type*>  (realloc(m_data, sizeof(storage_type) * ceil_div<size_t>(size*width, storage_bitwidth ) ));
        }
        ON_DEBUG(m_length = size;)
     }
 
     void write(const size_t i, const storage_type& key, const uint_fast8_t width) {
-        DCHECK_LT((static_cast<size_t>(i)*width)/64 + ((i)* width) % 64, 64*ceil_div<size_t>(m_length*width, 64) );
+        DCHECK_LT((static_cast<size_t>(i)*width)/storage_bitwidth + ((i)* width) % storage_bitwidth, storage_bitwidth*ceil_div<size_t>(m_length*width, storage_bitwidth) );
         DCHECK_LE(most_significant_bit(key), width);
 
-        tdc::tdc_sdsl::bits_impl<>::write_int(m_data + (static_cast<size_t>(i)*width)/64, key, ((i)* width) % 64, width);
-        DCHECK_EQ(tdc::tdc_sdsl::bits_impl<>::read_int(m_data + (static_cast<size_t>(i)*width)/64, ((i)* width) % 64, width), key);
+        tdc::tdc_sdsl::bits_impl<>::write_int(m_data + (static_cast<size_t>(i)*width)/storage_bitwidth, key, ((i)* width) % storage_bitwidth, width);
+        DCHECK_EQ(tdc::tdc_sdsl::bits_impl<>::read_int(m_data + (static_cast<size_t>(i)*width)/storage_bitwidth, ((i)* width) % storage_bitwidth, width), key);
     }
     storage_type read(size_t i, size_t width) const {
-        DCHECK_LT((static_cast<size_t>(i)*width)/64 + ((i)* width) % 64, 64*ceil_div<size_t>(m_length*width, 64) );
-        return tdc::tdc_sdsl::bits_impl<>::read_int(m_data + (static_cast<size_t>(i)*width)/64, ((i)* width) % 64, width);
+        DCHECK_LT((static_cast<size_t>(i)*width)/storage_bitwidth + ((i)* width) % storage_bitwidth, storage_bitwidth*ceil_div<size_t>(m_length*width, storage_bitwidth) );
+        return tdc::tdc_sdsl::bits_impl<>::read_int(m_data + (static_cast<size_t>(i)*width)/storage_bitwidth, ((i)* width) % storage_bitwidth, width);
     }
 
     size_t find(const storage_type& key, const size_t length, const size_t width) const {

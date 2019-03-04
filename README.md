@@ -73,6 +73,7 @@ The class `bucket_table` wraps a single bucket in a map/set interface.
 - Elements can be searched with `find`
 - The map can be used with the handy []-operator for retrieving and writing values. 
 - `find_or_insert` can be used to insert a key with a default value, or retrieve this key's value if it has already been inserted.
+- the hash table is serializable with standard streams `std::istream` and `std::ostream`. When storing many keys of a small domain with `varwidth_bucket`, one can likely achieve a compression by serializing the hash table instead of storing the elements in their plain form.
 
 ## Implementation Details and Advanced Usage
 
@@ -88,6 +89,7 @@ The class `bucket_table` wraps a single bucket in a map/set interface.
 
 ## Caveats
 - You cannot use an `avx2_bucket` with overloaded `malloc`/`free`.
+- There is no specizalization for serialization of a custom hash function. For instance, you obtain a corrupted hash table on deserialization when using a hash function that dynamically generates seeds.
 
 ## Dependencies
 
