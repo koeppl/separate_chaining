@@ -778,7 +778,7 @@ class separate_chaining_table {
         return bytes; 
     }
 
-    void serialize(std::ostream& os) {
+    void serialize(std::ostream& os) const {
         os.write(reinterpret_cast<const char*>(&m_width), sizeof(decltype(m_width)));
         os.write(reinterpret_cast<const char*>(&m_buckets), sizeof(decltype(m_buckets)));
         os.write(reinterpret_cast<const char*>(&m_elements), sizeof(decltype(m_elements)));
@@ -794,18 +794,6 @@ class separate_chaining_table {
             m_value_manager[bucket].serialize(os, m_bucketsizes[bucket], key_bitwidth); 
             ON_DEBUG(os.write(reinterpret_cast<const char*>(m_plainkeys[bucket]), sizeof(key_type)*m_bucketsizes[bucket]));
         }
-        // {
-        //     os.seekg(0);
-        //     decltype(m_width) width;
-        //     decltype(m_buckets) buckets;
-        //     decltype(m_elements) elements;
-        //     os >> width;
-        //     os >> buckets;
-        //     os >> elements;
-        //     DCHECK_EQ(m_width, width);
-        //     DCHECK_EQ(m_buckets, buckets);
-        //     DCHECK_EQ(m_elements, elements);
-        // }
     }
     void deserialize(std::istream& is) {
         clear();
