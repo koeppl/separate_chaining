@@ -768,7 +768,9 @@ class separate_chaining_table {
      */
     size_type size_in_bytes() const {
         const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
-        size_t bytes = sizeof(m_resize_strategy) * bucket_count() + sizeof(m_keys) + sizeof(m_value_manager) + sizeof(m_bucketsizes) + sizeof(m_buckets) + sizeof(m_elements) + sizeof(m_width) + sizeof(m_hash);
+        size_t bytes = 
+            sizeof(m_resize_strategy) * bucket_count() + 
+            sizeof(m_keys) + sizeof(m_value_manager) + sizeof(m_bucketsizes) + sizeof(m_buckets) + sizeof(m_elements) + sizeof(m_width) + sizeof(m_hash);
         for(size_t bucket = 0; bucket < bucket_count(); ++bucket) {
             bytes += ceil_div<size_t>(m_bucketsizes[bucket]*key_bitwidth, sizeof(key_type)*8)*sizeof(key_type);
             bytes += m_value_manager.value_width() *(m_bucketsizes[bucket]);
@@ -776,7 +778,7 @@ class separate_chaining_table {
         return bytes; 
     }
 
-    void serialize(std::stringstream& os) {
+    void serialize(std::ostream& os) {
         os.write(reinterpret_cast<const char*>(&m_width), sizeof(decltype(m_width)));
         os.write(reinterpret_cast<const char*>(&m_buckets), sizeof(decltype(m_buckets)));
         os.write(reinterpret_cast<const char*>(&m_elements), sizeof(decltype(m_elements)));
