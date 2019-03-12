@@ -8,16 +8,6 @@
 #include <stdexcept>
 
 
-#ifdef STATS_ENABLED // opt in STATS
-#ifdef STATS_DISABLED 
-#undef STATS_DISABLED 
-#endif
-#else
-#ifndef STATS_DISABLED 
-#define STATS_DISABLED 
-#endif
-#endif
-
 #ifdef NDEBUG
 #define ON_DEBUG(x)
 #else

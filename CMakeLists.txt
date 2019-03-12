@@ -16,32 +16,6 @@ include_directories(include)
 add_subdirectory(external/bit_span)
 include_directories(external/bit_span/include)
 
-##########
-# BENCHMARKS
-##########
-
-
-set(NO_CELERO 0)
-find_path(CELERO_INCLUDE_DIR celero/Celero.h)
-find_library(CELERO_LIB libcelero.so)
-if(CELERO_INCLUDE_DIR STREQUAL "CELERO_INCLUDE_DIR-NOTFOUND" OR CELERO_LIB_DIR STREQUAL "CELERO_LIB-NOTFOUND")
-	set(NO_CELERO 1)
-	add_definitions(-DNO_CELERO=1)
-else()
-	include_directories(${CELERO_INCLUDE_DIR})
-endif()
-
-if(NO_CELERO EQUAL 0)
-    include_directories(external/compact_sparse_hash/include)
-
-    add_executable(bench_table bench_table.cpp)
-    target_link_libraries(bench_table ${CELERO_LIB} glog)
-
-    add_executable(bench_smalltable bench_smalltable.cpp)
-    target_link_libraries(bench_smalltable ${CELERO_LIB} glog)
-
-    #target_link_libraries(bench_table ${CELERO_LIB})
-endif()
 
 ##########
 # library
@@ -72,7 +46,6 @@ enable_testing()
 add_test(NAME map COMMAND test_map)
 
 
-MESSAGE( STATUS "With Celero?: " ${CELERO_INCLUDE_DIR} ${CELERO_LIB_DIR} )
 MESSAGE( STATUS "With Gtest?: " ${GTEST_INCLUDE_DIR} )
 MESSAGE( STATUS "Built Type: " ${CMAKE_BUILD_TYPE} )
 MESSAGE( STATUS "CXX Flags: " ${CMAKE_CXX_FLAGS} )
