@@ -51,6 +51,9 @@ struct separate_chaining_navigator {
         const key_type key()  const {
             DCHECK(!invalid());
             const uint_fast8_t key_bitwidth = m_map.m_hash.remainder_width(m_map.m_buckets);
+            DCHECK_GT(key_bitwidth, 0);
+            DCHECK_LE(key_bitwidth, m_map.key_bit_width());
+
             const storage_type read_quotient = m_map.m_keys[m_bucket].read(m_position, key_bitwidth);
             const key_type read_key = m_map.m_hash.inv_map(read_quotient, m_bucket, m_map.m_buckets);
             return read_key;
@@ -311,6 +314,9 @@ class separate_chaining_table {
     //! shrinks a bucket to its real size
     void shrink_to_fit(size_t bucket) {
         const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
+        DCHECK_GT(key_bitwidth, 0);
+        DCHECK_LE(key_bitwidth, key_bit_width());
+
         const bucketsize_type& bucket_size = m_bucketsizes[bucket];
         if(bucket_size == 0) return;
         if(m_resize_strategy.can_shrink(bucket_size, bucket)) { 
@@ -399,9 +405,7 @@ class separate_chaining_table {
     }
 
     size_t max_bucket_size() const { //! largest number of elements a bucket can contain before enlarging the hash table
-        const size_t ret = (separate_chaining::MAX_BUCKET_BYTESIZE*8)/m_width;
-        DCHECK_LE(ret, std::numeric_limits<bucketsize_type>::max());
-        return ret;
+        return std::min<size_t>(std::numeric_limits<bucketsize_type>::max(), (separate_chaining::MAX_BUCKET_BYTESIZE*8)/m_width);
     }
 
     //! @see std::unordered_map
@@ -423,6 +427,8 @@ class separate_chaining_table {
         : m_width(width)
         , m_hash(m_width) 
     {
+        DCHECK_GT(width, 1);
+        DCHECK_LE(width, 64);
         // DCHECK_LE(width, sizeof(key_type)*8);
     }
 
@@ -514,6 +520,9 @@ class separate_chaining_table {
 #endif
             const size_t cbucket_count = bucket_count();
             const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
+            DCHECK_GT(key_bitwidth, 0);
+            DCHECK_LE(key_bitwidth, key_bit_width());
+
             for(size_t bucket = 0; bucket < cbucket_count; ++bucket) {
                 if(m_bucketsizes[bucket] == 0) continue;
                 const key_bucket_type& bucket_keys_it = m_keys[bucket];
@@ -604,6 +613,8 @@ class separate_chaining_table {
     private:
     size_t locate(const size_t& bucket, const storage_type& quotient) const {
         const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
+        DCHECK_GT(key_bitwidth, 0);
+        DCHECK_LE(key_bitwidth, key_bit_width());
         DCHECK_LE(most_significant_bit(quotient), key_bitwidth);
 
         bucketsize_type& bucket_size = m_bucketsizes[bucket];
@@ -650,7 +661,8 @@ class separate_chaining_table {
     }
 
     navigator find_or_insert(const key_type& key, value_type&& value) {
-        if(m_buckets == 0) reserve(separate_chaining::INITIAL_BUCKETS);
+        DCHECK_GT(key_bit_width(), 1);
+        if(m_buckets == 0) reserve(std::min<size_t>(key_bit_width()-1, separate_chaining::INITIAL_BUCKETS));
         const auto [quotient, bucket] = m_hash.map(key, m_buckets);
         DCHECK_EQ(m_hash.inv_map(quotient, bucket, m_buckets), key);
 
@@ -676,6 +688,8 @@ class separate_chaining_table {
         key_bucket_type& bucket_keys = m_keys[bucket];
         ON_DEBUG(key_type*& bucket_plainkeys = m_plainkeys[bucket];)
         const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
+        DCHECK_GT(key_bitwidth, 0);
+        DCHECK_LE(key_bitwidth, key_bit_width());
 
         if(bucket_size == 0) {
             bucket_size = 1;
@@ -730,6 +744,8 @@ class separate_chaining_table {
         DCHECK_LE(bucket_size, bucket_keys.m_length);
 
         const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
+        DCHECK_GT(key_bitwidth, 0);
+        DCHECK_LE(key_bitwidth, key_bit_width());
 
         for(size_t i = position+1; i < bucket_size; ++i) {
             bucket_keys.write(i-1, bucket_keys.read(i, key_bitwidth), key_bitwidth);
@@ -768,6 +784,9 @@ class separate_chaining_table {
      */
     size_type size_in_bytes() const {
         const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
+        DCHECK_GT(key_bitwidth, 0);
+        DCHECK_LE(key_bitwidth, key_bit_width());
+
         size_t bytes = 
             sizeof(m_resize_strategy) * bucket_count() + 
             sizeof(m_keys) + sizeof(m_value_manager) + sizeof(m_bucketsizes) + sizeof(m_buckets) + sizeof(m_elements) + sizeof(m_width) + sizeof(m_hash);

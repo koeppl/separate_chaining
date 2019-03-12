@@ -53,7 +53,7 @@ class xorshift_hash {
     xorshift_hash(const uint_fast8_t width) : func(width) { }
 
     uint_fast8_t remainder_width(const uint_fast8_t table_buckets) const {
-        DCHECK_LE(table_buckets, func.bits());
+        DCHECK_LT(table_buckets, func.bits()); //! the hash table needs a remainder of at least one bit
         return func.bits() - table_buckets;
     }
     
