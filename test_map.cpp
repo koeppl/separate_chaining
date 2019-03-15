@@ -3,13 +3,13 @@
 #include <map>
 #include <algorithm>
 #include <separate/separate_chaining_table.hpp>
+#include <separate/compact_chaining_map.hpp>
 #include <separate/keysplit_adapter.hpp>
 #include <separate/bijective_hash.hpp>
 #include <separate/bucket_table.hpp>
 
 using namespace separate_chaining;
 using bijective_hash = bijective_hash::Xorshift;
-
 
 #define COMMA ,
 
@@ -258,14 +258,25 @@ TEST(map, quotienting) {
    TEST(x, random) { y; test_map_random(map); } \
    TEST(x, random_large) { y; test_map_random_large(map); } 
 
+TEST_MAP(compact_map_32_8, compact_chaining_map<hash_mapping_adapter<uint32_t COMMA SplitMix> COMMA uint8_t  > map(32,64))
+TEST_MAP(compact_map_8_8, compact_chaining_map<hash_mapping_adapter<uint8_t COMMA SplitMix>  COMMA uint8_t > map(8,64))
+TEST_MAP(compact_map_64_8, compact_chaining_map<hash_mapping_adapter<uint64_t COMMA SplitMix> COMMA uint8_t  > map)
+TEST_MAP(compact_map_Xor, compact_chaining_map<xorshift_hash<> > map)
+TEST_MAP(compact_map_Xor_8_8, compact_chaining_map<xorshift_hash<> COMMA uint8_t > map(8,64))
+
+TEST_MAP(compact_map_8, compact_chaining_map<hash_mapping_adapter<uint8_t COMMA SplitMix>  > map(8,64))
+TEST_MAP(compact_map_32, compact_chaining_map<hash_mapping_adapter<uint32_t COMMA SplitMix>  > map(32,64))
+TEST_MAP(compact_map_64, compact_chaining_map<hash_mapping_adapter<uint64_t COMMA SplitMix>  > map)
+
+
+TEST_MAP_FULL(map_var_arb_16,  separate_chaining_map<varwidth_bucket<> COMMA plain_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix> COMMA arbitrary_resize> map)
 TEST_MAP_FULL(map_plain_16,  separate_chaining_map<plain_bucket<uint32_t> COMMA plain_bucket<uint16_t> COMMA hash_mapping_adapter<uint32_t COMMA SplitMix> COMMA incremental_resize> map)
 TEST_MAP_FULL(map_plain_32,  separate_chaining_map<plain_bucket<uint32_t> COMMA plain_bucket<uint32_t> COMMA hash_mapping_adapter<uint32_t COMMA SplitMix> COMMA incremental_resize> map)
 TEST_MAP_FULL(map_plain_Xor, separate_chaining_map<plain_bucket<uint32_t> COMMA plain_bucket<uint32_t> COMMA xorshift_hash<uint32_t> COMMA incremental_resize> map(32))
 
 TEST_MAP_FULL(map_plain_arb_16,  separate_chaining_map<plain_bucket<uint32_t> COMMA plain_bucket<uint16_t> COMMA hash_mapping_adapter<uint32_t COMMA SplitMix> COMMA arbitrary_resize> map)
-TEST_MAP_FULL(map_var_arb_16,  separate_chaining_map<varwidth_bucket COMMA plain_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix> COMMA arbitrary_resize> map)
 
-TEST_MAP_FULL(map_var_Xor_64, separate_chaining_map<varwidth_bucket COMMA plain_bucket<uint32_t> COMMA xorshift_hash<> COMMA incremental_resize> map(64))
+TEST_MAP_FULL(map_var_Xor_64, separate_chaining_map<varwidth_bucket<> COMMA plain_bucket<uint32_t> COMMA xorshift_hash<> COMMA incremental_resize> map(64))
 
 #ifdef __AVX2__
 TEST_MAP_FULL(map_avx2_16_16,  separate_chaining_map<avx2_bucket<uint16_t> COMMA plain_bucket<uint16_t> COMMA hash_mapping_adapter<uint16_t COMMA SplitMix> COMMA incremental_resize > map)
@@ -285,22 +296,22 @@ TEST_MAP_FULL(map_plain_class32,  separate_chaining_map<class_bucket<uint32_t> C
 
 
 
-TEST_MAP_FULL(map_var_16,  separate_chaining_map<varwidth_bucket COMMA plain_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix> COMMA incremental_resize> map)
-TEST_MAP_FULL(map_var_32,  separate_chaining_map<varwidth_bucket COMMA plain_bucket<uint32_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix> COMMA incremental_resize> map)
-TEST_MAP_FULL(map_var_Xor, separate_chaining_map<varwidth_bucket COMMA plain_bucket<uint32_t> COMMA xorshift_hash<uint64_t> COMMA incremental_resize> map(32))
+TEST_MAP_FULL(map_var_16,  separate_chaining_map<varwidth_bucket<> COMMA plain_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix> COMMA incremental_resize> map)
+TEST_MAP_FULL(map_var_32,  separate_chaining_map<varwidth_bucket<> COMMA plain_bucket<uint32_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix> COMMA incremental_resize> map)
+TEST_MAP_FULL(map_var_Xor, separate_chaining_map<varwidth_bucket<> COMMA plain_bucket<uint32_t> COMMA xorshift_hash<uint64_t> COMMA incremental_resize> map(32))
 
 
 
 TEST_SMALL_MAP(map_plain_small32,  separate_chaining_map<plain_bucket<uint32_t> COMMA plain_bucket<uint32_t> COMMA hash_mapping_adapter<uint32_t COMMA SplitMix> COMMA incremental_resize> map)
 TEST_SMALL_MAP(map_bucket_plain_arb_16,  bucket_table<plain_bucket<uint32_t> COMMA plain_bucket<uint16_t> COMMA arbitrary_resize_bucket> map)
-TEST_SMALL_MAP(map_bucket_var_arb_16,    bucket_table<varwidth_bucket COMMA plain_bucket<uint16_t> COMMA arbitrary_resize_bucket> map)
+TEST_SMALL_MAP(map_bucket_var_arb_16,    bucket_table<varwidth_bucket<> COMMA plain_bucket<uint16_t> COMMA arbitrary_resize_bucket> map)
 TEST_SMALL_MAP(map_bucket_plain_16,  bucket_table<plain_bucket<uint32_t> COMMA plain_bucket<uint16_t> COMMA incremental_resize> map)
-TEST_SMALL_MAP(map_bucket_var_16,    bucket_table<varwidth_bucket COMMA plain_bucket<uint16_t> COMMA incremental_resize> map)
+TEST_SMALL_MAP(map_bucket_var_16,    bucket_table<varwidth_bucket<> COMMA plain_bucket<uint16_t> COMMA incremental_resize> map)
 
 
-TEST_MAP(keysplit_adapter64, keysplit_adapter64<separate_chaining_map<varwidth_bucket COMMA plain_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> COMMA separate_chaining_map<plain_bucket<uint64_t> COMMA plain_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> > map)
+TEST_MAP(keysplit_adapter64, keysplit_adapter64<separate_chaining_map<varwidth_bucket<> COMMA plain_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> COMMA separate_chaining_map<plain_bucket<uint64_t> COMMA plain_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> > map)
 
-TEST_MAP(keysplit_adapter, keysplit_adapter<separate_chaining_map<varwidth_bucket COMMA plain_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>>> map)
+TEST_MAP(keysplit_adapter, keysplit_adapter<separate_chaining_map<varwidth_bucket<> COMMA plain_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>>> map)
 
 
 

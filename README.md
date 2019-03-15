@@ -51,6 +51,11 @@ Another way is to allocate sufficiently large memory to store keys of a specific
   - `arbitrary_resize` increases the size of a bucket in relation to its current size. The current implementation doubles the size `s` of a bucket until `s` is larger than a fixed threshold. 
   After surpassing the threshold, the size is increased merely by 50%. This behavior can be adjusted in `arbitrary_resize::resize`.
 
+## Compact Chaining Map
+The map `compact_chaining_map` is the most space efficient but also most time consuming hash table layout storing keys and values that are integers.
+It combines the key and the value bucket in a single bucket (and thus using only one pointer instead of two).
+The bucket is first filled with the keys, and then subsequently with the values.
+It can also store values of arbitrary bit widths (not necessarily quantisized by eight).
 
 ## Key Splitting
 
@@ -85,6 +90,7 @@ The class `bucket_table` wraps a single bucket in a map/set interface.
   This means that an iterator has to create a pair on the fly, which can cause a slowdown. 
   Instead, you can use the navigator interface with the methods `key()` and `value()`.
 - If you want to process and delete processed elements like you would do with a stack or queue, start at `rbegin_nav` and end at `rend_nav`, using decremental operation on the navigator object.
+- The `internal_type` of `varwidth_bucket` can be changed to a different integer type. If `interal_type` has `x` bits, then the data is stored in an array of elements using `x` bits, i.e., the space is quantisized by `x`. Small integers can save space will large integers give a speed-up due to fewer `malloc` calls.
 
 
 ## Caveats

@@ -343,8 +343,8 @@ class bucket_table {
         if(!m_keys.initialized()) {
             m_elements = 1;
             ON_DEBUG(m_plainkeys   = reinterpret_cast<key_type*>  (malloc(sizeof(key_type))));
-            m_keys.initiate(resize_strategy_type::INITIAL_BUCKET_SIZE);
-            m_values.initiate(resize_strategy_type::INITIAL_BUCKET_SIZE);
+            m_keys.initiate(resize_strategy_type::INITIAL_BUCKET_SIZE, key_bit_width());
+            m_values.initiate(resize_strategy_type::INITIAL_BUCKET_SIZE, sizeof(value_type)*8);
             m_resize_strategy.assign(resize_strategy_type::INITIAL_BUCKET_SIZE);
         } else { 
             const size_t position = locate(key);

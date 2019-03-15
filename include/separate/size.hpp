@@ -76,6 +76,7 @@ class arbitrary_resize {
 
     bucketsize_type size_after_increment(const bucketsize_type newsize, const size_t bucket) {
         DCHECK_LT(bucket, m_buckets);
+        DCHECK_LE(newsize, std::numeric_limits<bucketsize_type>::max());
         DCHECK_LE(static_cast<size_t>(resize(newsize)),std::numeric_limits<bucketsize_type>::max());
         return m_maxbucketsizes[bucket] = resize(newsize);
     }
@@ -98,7 +99,7 @@ class arbitrary_resize {
      */
     static size_t resize(const size_t newsize) {
         if(newsize < separate_chaining::MAX_BUCKET_BYTESIZE / 4) return newsize*2;
-        return newsize * 1.5f; // see https://github.com/facebook/folly/blob/master/folly/docs/FBVector.md
+        return std::min<size_t>(newsize * 1.5f, std::numeric_limits<bucketsize_type>::max());; // see https://github.com/facebook/folly/blob/master/folly/docs/FBVector.md
     }
 };
 

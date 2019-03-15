@@ -28,7 +28,8 @@ class hash_mapping_adapter {
     hash_mapping_adapter(uint_fast8_t key_width) : m_width(key_width) {}
     
     uint_fast8_t remainder_width([[maybe_unused]] const uint_fast8_t table_buckets) const {
-        return sizeof(key_t)*8;
+       return m_width;
+        // return sizeof(key_t)*8;
     }
 
     std::pair<storage_type, size_t> map(const key_type& key, [[maybe_unused]] const uint_fast8_t table_buckets) const {
