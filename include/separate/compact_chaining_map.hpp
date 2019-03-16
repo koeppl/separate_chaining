@@ -68,7 +68,7 @@ namespace separate_chaining {
 /**
  * hash_mapping_t: a hash mapping from `hash.hpp`
  */
-template<class hash_mapping_t, class storage_t = uint64_t>
+template<class hash_mapping_t, class storage_t = uint8_t>
 class compact_chaining_map {
     public:
     using hash_mapping_type = hash_mapping_t;
