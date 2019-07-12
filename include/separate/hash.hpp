@@ -62,6 +62,7 @@ class xorshift_hash {
         const size_t hash_value = func.hash(key);
         DCHECK_EQ(func.hash_inv(hash_value), key);
         DCHECK_LE(hash_value >> table_buckets, std::numeric_limits<storage_type>::max());
+        //TODO: swap both entries, as H[i] can then be mapped directly to H[2i] and H[2i+1] on a resize
         const auto ret = std::make_pair(hash_value >> table_buckets, hash_value & ((1ULL << table_buckets) - 1ULL) );
         DCHECK_EQ(inv_map(ret.first, ret.second, table_buckets), key);
         return ret;

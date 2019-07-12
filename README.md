@@ -49,7 +49,8 @@ Another way is to allocate sufficiently large memory to store keys of a specific
     Moreover, there is no need to store the capacities of the buckets.  
     and that there is no space wasted.
   - `arbitrary_resize` increases the size of a bucket in relation to its current size. The current implementation doubles the size `s` of a bucket until `s` is larger than a fixed threshold. 
-  After surpassing the threshold, the size is increased merely by 50%. This behavior can be adjusted in `arbitrary_resize::resize`.
+  After surpassing the threshold, the size is increased merely by 50% (inspired by the [discussion of Folly's vector](https://github.com/facebook/folly/blob/master/folly/docs/FBVector.md)). 
+  This behavior can be adjusted in `arbitrary_resize::resize`.
 
 ## Compact Chaining Map
 The map `compact_chaining_map` is the most space efficient but also most time consuming hash table layout storing keys and values that are integers.
