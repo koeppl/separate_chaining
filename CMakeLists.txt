@@ -35,12 +35,15 @@ install(FILES separate_chaining_map.hpp DESTINATION include)
 # TESTS
 ##########
 
+FIND_LIBRARY(GLOG_LIBRARY glog)
+FIND_PATH(GLOG_INCLUDE_DIR "glog/logging.h")
+
 find_package(GTest)
 include_directories(${GTEST_INCLUDE_DIR})
 
 add_executable  (test_map test_map.cpp)
 
-target_link_libraries(test_map gtest pthread)
+target_link_libraries(test_map gtest pthread ${GLOG_LIBRARY})
 
 enable_testing()
 add_test(NAME map COMMAND test_map)

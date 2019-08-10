@@ -79,6 +79,7 @@ class compact_chaining_map {
     using value_type = size_t;
     using value_ref_type = value_type;
     using value_constref_type = value_type;
+    using overflow_type = dummy_overflow<key_type, value_type>;
 
 
     using bucketsize_type = separate_chaining::bucketsize_type; //! used for storing the sizes of the buckets
@@ -106,6 +107,7 @@ class compact_chaining_map {
     uint_fast8_t m_value_width;
     hash_mapping_type m_hash; //! hash function
 
+    overflow_type m_overflow; // TODO: this is a dummy variable. Need to write the same logic as in separate_chaining_table.hpp for full functionality
 
     //! dummy: shrinks a bucket to its real size
     constexpr void shrink_to_fit(size_t) {}

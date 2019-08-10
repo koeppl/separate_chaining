@@ -268,7 +268,7 @@ class plain_bucket {
         : m_data(std::move(other.m_data))
     {
         other.m_data = nullptr;
-        ON_DEBUG(m_length = other.m_data; other.m_data = 0;)
+        ON_DEBUG(m_length = other.m_length; other.m_data = 0;)
     }
     plain_bucket(storage_type*&& keys) 
         : m_data(std::move(keys))

@@ -7,6 +7,7 @@
 #include "hash.hpp"
 #include "bucket.hpp"
 #include "size.hpp"
+#include "overflow.hpp"
 #if STATS_ENABLED
 #include <tudocomp_stat/StatPhase.hpp>
 #endif
@@ -36,6 +37,9 @@ struct separate_chaining_navigator {
 
 
         bool invalid() const {
+            if(m_map.m_overflow.size() > 0 && m_bucket == m_map.bucket_count() && m_map.m_overflow.valid_position(m_position)) 
+                { return false; }
+
             return m_bucket >= m_map.bucket_count() || m_position >= m_map.bucket_size(m_bucket);
         }
 
@@ -61,6 +65,9 @@ struct separate_chaining_navigator {
             const uint_fast8_t key_bitwidth = m_map.m_hash.remainder_width(m_map.m_buckets);
             DCHECK_GT(key_bitwidth, 0);
             DCHECK_LE(key_bitwidth, m_map.key_bit_width());
+            if(m_map.m_overflow.size() > 0 && m_bucket == m_map.bucket_count()) {
+                return m_map.m_overflow.key(m_position);
+            }
 
             const storage_type read_quotient = m_map.quotient_at(m_bucket, m_position, key_bitwidth);
             const key_type read_key = m_map.m_hash.inv_map(read_quotient, m_bucket, m_map.m_buckets);
@@ -69,15 +76,26 @@ struct separate_chaining_navigator {
         //typename std::add_const<value_type>::type& value() const {
         value_constref_type value() const {
             DCHECK(!invalid());
+            if(m_map.m_overflow.size() > 0 && m_bucket == m_map.bucket_count()) {
+                return m_map.m_overflow[m_position];
+            }
             value_constref_type i = m_map.value_at(m_bucket, m_position);
             return i;
         }
         value_ref_type value_ref() {
             DCHECK(!invalid());
+            if(m_map.m_overflow.size() > 0 && m_bucket == m_map.bucket_count()) {
+                return m_map.m_overflow[m_position];
+            }
             return m_map.value_at(m_bucket, m_position);
         }
 
         class_type& operator++() { 
+            if(m_map.m_overflow.size() > 0 && m_bucket == m_map.bucket_count()) {
+                m_position = m_map.m_overflow.next_position(m_position);
+                return *this;
+            }
+
             DCHECK_LT(m_bucket, m_map.bucket_count());
             if(m_position+1 >= m_map.bucket_size(m_bucket)) { 
                 m_position = 0;
@@ -90,6 +108,15 @@ struct separate_chaining_navigator {
             return *this;
         }
         class_type& operator--() { 
+            if(m_map.m_overflow.size() > 0 && m_bucket == m_map.bucket_count()) {
+                if(m_position > 0) {
+                    m_position = m_map.m_overflow.previous_position(m_position);
+                    return *this;
+                }
+                --m_bucket;
+                m_position = std::min<size_t>(m_position,  m_map.bucket_size(m_bucket))-1;
+                return *this;
+            }
             DCHECK_LT(m_bucket, m_map.bucket_count());
             if(m_position > 0 && m_map.bucket_size(m_bucket) > 0) {
                 m_position = std::min<size_t>(m_position,  m_map.bucket_size(m_bucket))-1; // makes an invalid pointer valid after erasing
@@ -276,13 +303,15 @@ class value_array_manager {
  * hash_mapping_t: a hash mapping from `hash.hpp`
  * resize_strategy_t: either `arbitrary_resize` or `incremental_resize`
  */
-template<class key_bucket_t, class value_manager_t, class hash_mapping_t, class resize_strategy_t>
+template<class key_bucket_t, class value_manager_t, class hash_mapping_t, class resize_strategy_t, 
+    class overflow_t = map_overflow<typename hash_mapping_t::key_type, typename value_manager_t::value_bucket_type::storage_type>>
 class separate_chaining_table {
     public:
     using key_bucket_type = key_bucket_t;
     using value_manager_type = value_manager_t;
     using value_bucket_type = typename value_manager_t::value_bucket_type;
     using hash_mapping_type = hash_mapping_t;
+    using overflow_type = overflow_t;
 
     using resize_strategy_type = resize_strategy_t; //! how large a buckets becomes resized
 
@@ -299,7 +328,7 @@ class separate_chaining_table {
 
     using bucketsize_type = separate_chaining::bucketsize_type; //! used for storing the sizes of the buckets
     using size_type = uint64_t; //! used for addressing the i-th bucket
-    using class_type = separate_chaining_table<key_bucket_type, value_manager_type, hash_mapping_type, resize_strategy_type>;
+    using class_type = separate_chaining_table<key_bucket_type, value_manager_type, hash_mapping_type, resize_strategy_type, overflow_type>;
     using iterator = separate_chaining_iterator<class_type>;
     using const_iterator = separate_chaining_iterator<const class_type>;
     using navigator = separate_chaining_navigator<class_type>;
@@ -322,6 +351,7 @@ class separate_chaining_table {
     uint_fast8_t m_width;
     hash_mapping_type m_hash; //! hash function
 
+    overflow_type m_overflow;
 
     //! shrinks a bucket to its real size
     void shrink_to_fit(size_t bucket) {
@@ -380,6 +410,7 @@ class separate_chaining_table {
         m_buckets = 0;
         m_elements = 0;
         m_resize_strategy.clear();
+        m_overflow.clear();
     }
 
     /**
@@ -393,6 +424,9 @@ class separate_chaining_table {
                 clear(bucket);
             }
             clear_structure();
+        }
+        else {
+          m_overflow.clear(); // needs extra call
         }
     }
 
@@ -429,8 +463,11 @@ class separate_chaining_table {
     }
 
     static constexpr size_t max_bucket_size() { //! largest number of elements a bucket can contain before enlarging the hash table
-        // return std::min<size_t>(std::numeric_limits<bucketsize_type>::max(), (separate_chaining::MAX_BUCKET_BYTESIZE*8)/m_width);
+    #ifdef SEPARATE_MAX_BUCKET_SIZE
+        return std::min<size_t>(SEPARATE_MAX_BUCKET_SIZE, std::numeric_limits<bucketsize_type>::max());
+#else
         return std::numeric_limits<bucketsize_type>::max(); //, (separate_chaining::MAX_BUCKET_BYTESIZE*8)/m_width);
+#endif
     }
 
     //! @see std::unordered_map
@@ -466,6 +503,7 @@ class separate_chaining_table {
        , m_elements(std::move(other.m_elements))
        , m_hash(std::move(other.m_hash))
        , m_resize_strategy(std::move(other.m_resize_strategy))
+       , m_overflow(std::move(other.m_overflow))
     {
 
         ON_DEBUG(m_plainkeys = std::move(other.m_plainkeys); other.m_plainkeys = nullptr;)
@@ -483,6 +521,7 @@ class separate_chaining_table {
         m_hash        = std::move(other.m_hash);
         m_elements    = std::move(other.m_elements);
         m_resize_strategy = std::move(other.m_resize_strategy);
+        m_overflow       = std::move(other.m_overflow);
         ON_DEBUG(m_plainkeys = std::move(other.m_plainkeys); other.m_plainkeys = nullptr;)
         other.m_bucketsizes = nullptr; //! a hash map without buckets is already deleted
         return *this;
@@ -499,6 +538,7 @@ class separate_chaining_table {
         std::swap(m_hash, other.m_hash);
         std::swap(m_elements, other.m_elements);
         std::swap(m_resize_strategy, other.m_resize_strategy);
+        std::swap(m_overflow, other.m_overflow);
     }
 
 #if STATS_ENABLED
@@ -507,13 +547,25 @@ class separate_chaining_table {
             statphase.log("size", size());
             statphase.log("bytes", size_in_bytes());
             statphase.log("bucket_count", bucket_count());
+            statphase.log("overflow_size", m_overflow.size());
+            statphase.log("overflow_capacity", m_overflow.capacity());
             double deviation = 0;
+            std::vector<size_t> bucket_sizes(bucket_count());
             for(size_t i = 0; i < bucket_count(); ++i) {
+                bucket_sizes[i] = bucket_size(i);
                 const double diff = (static_cast<double>(size()/bucket_count()) - bucket_size(i));
                 deviation += diff*diff;
             }
-            statphase.log("deviation", deviation);
+            std::sort(bucket_sizes.begin(), bucket_sizes.end());
+            statphase.log("deviation_bucket_size", deviation);
             statphase.log("width", m_width);
+            statphase.log("median_bucket_size", 
+                    (bucket_sizes.size() % 2 != 0)
+                    ? static_cast<double>(bucket_sizes[bucket_sizes.size()/2])
+                    : static_cast<double>(bucket_sizes[(bucket_sizes.size()-1)/2]+ bucket_sizes[(bucket_sizes.size()/2)])/2
+                    );
+            statphase.log("average_bucket_size", static_cast<double>(size()) / bucket_count());
+            statphase.log("min_bucket_size", bucket_sizes[0]);
             statphase.log("max_bucket_size", max_bucket_size());
             statphase.log("capacity", capacity());
     }
@@ -526,6 +578,7 @@ class separate_chaining_table {
         if(1ULL<<reserve_bits != reserve) ++reserve_bits;
         const size_t new_size = 1ULL<<reserve_bits;
 
+        m_overflow.resize_buckets(new_size);
         if(m_buckets == 0) {
             ON_DEBUG(m_plainkeys   = reinterpret_cast<key_type**>  (malloc(new_size*sizeof(key_type*)));)
             ON_DEBUG( std::fill(m_plainkeys, m_plainkeys+new_size, nullptr);)
@@ -560,12 +613,17 @@ class separate_chaining_table {
                 }
                 clear(bucket);
             }
+            for(size_t i = 0; i < m_overflow.size(); ++i) {
+                tmp_map.find_or_insert(m_overflow.key(i), std::move(m_overflow[i]));
+            }
+
             clear_structure();
             swap(tmp_map);
         }
     }
     const navigator rbegin_nav() {
         const size_t cbucket_count = bucket_count();
+        if(m_overflow.size() > 0) return { *this, cbucket_count, m_overflow.size() };
         if(cbucket_count == 0) return end_nav();
         for(size_t bucket = cbucket_count-1; bucket >= 0;  --bucket) {
             if(m_bucketsizes[bucket] > 0) {
@@ -589,6 +647,7 @@ class separate_chaining_table {
                 return { *this, bucket, 0 };
             }
         }
+        if(m_overflow.size() > 0) return { *this, cbucket_count, 0 };
         return end();
     }
     const const_iterator cbegin() const {
@@ -598,6 +657,7 @@ class separate_chaining_table {
                 return { *this, bucket, 0 };
             }
         }
+        if(m_overflow.size() > 0) return { *this, cbucket_count, 0 };
         return cend();
     }
     const navigator begin_nav() {
@@ -607,6 +667,7 @@ class separate_chaining_table {
                 return { *this, bucket, 0 };
             }
         }
+        if(m_overflow.size() > 0) return { *this, cbucket_count, 0 };
         return end_nav();
     }
     const navigator end_nav() {
@@ -619,6 +680,7 @@ class separate_chaining_table {
                 return { *this, bucket, 0 };
             }
         }
+        if(m_overflow.size() > 0) return { *this, cbucket_count, 0 };
         return cend_nav();
     }
     const const_navigator cend_nav() const {
@@ -627,6 +689,12 @@ class separate_chaining_table {
 
     const_iterator find(const key_type& key) const {
         if(m_buckets == 0) return cend();
+        if(m_overflow.size() > 0) {
+            const size_t position = m_overflow.find(key);
+            if(position != static_cast<size_t>(-1ULL)) {
+                return const_iterator { *this, bucket_count(), position };
+            }
+        }
         const auto [quotient, bucket] = m_hash.map(key, m_buckets);
         DCHECK_EQ(m_hash.inv_map(quotient, bucket, m_buckets), key);
         const size_t position = locate(bucket, quotient);
@@ -680,6 +748,13 @@ class separate_chaining_table {
      */
     std::pair<size_t, size_t> locate(const key_type& key) const {
         if(m_buckets == 0) throw std::runtime_error("cannot query empty hash table");
+        if(m_overflow.size() > 0) {
+            const size_t position = m_overflow.find(key);
+            if(position != (-1ULL)) {
+                return { bucket_count(), position };
+            }
+        }
+
         const auto [quotient, bucket] = m_hash.map(key, m_buckets);
         DCHECK_EQ(m_hash.inv_map(quotient, bucket, m_buckets), key);
 
@@ -698,11 +773,26 @@ class separate_chaining_table {
         value_bucket_type& bucket_values = m_value_manager[bucket];
         if(position != static_cast<size_t>(-1ULL)) {
             DCHECK_LT(position, bucket_size);
-            return { *this, bucket ,position };
+            return { *this, bucket, position };
+        }
+        if(m_overflow.need_consult(bucket)) {
+            const size_t overflow_position = m_overflow.find(key);
+            if(overflow_position != static_cast<size_t>(-1ULL)) {
+                return { *this, bucket_count(), overflow_position };
+            }
         }
 
 
         if(bucket_size == max_bucket_size()) {
+            if(m_overflow.size() < m_overflow.capacity()) {
+                const size_t overflow_position = m_overflow.insert(bucket, key, value);
+                if(overflow_position != static_cast<size_t>(-1ULL)) { // could successfully insert element into overflow table
+                    ++m_elements;
+                    DCHECK_EQ(m_overflow.find(key), overflow_position);
+                    DCHECK_EQ(m_overflow[m_overflow.find(key)], value);
+                    return { *this, bucket_count(), overflow_position };
+                }
+            }
             // if(m_elements*separate_chaining::FAIL_PERCENTAGE < max_size()) {
             //     throw std::runtime_error("The chosen hash function is bad!");
             // }
@@ -761,6 +851,15 @@ class separate_chaining_table {
 
     size_type erase(const size_t bucket, const size_t position) {
         if(position == static_cast<size_t>(-1ULL)) return 0;
+        if(m_overflow.size() > 0 && bucket == bucket_count()) {
+            DCHECK_LT(position, m_overflow.size());
+            m_overflow.erase(position);
+            --m_elements;
+            return 1;
+        }
+
+        DCHECK_LT(bucket, bucket_count());
+        DCHECK_LT(position, m_bucketsizes[bucket]);
 
         bucketsize_type& bucket_size = m_bucketsizes[bucket];
         key_bucket_type& bucket_keys = m_keys[bucket];
@@ -820,10 +919,12 @@ class separate_chaining_table {
             bytes += ceil_div<size_t>(m_bucketsizes[bucket]*key_bitwidth, sizeof(key_type)*8)*sizeof(key_type);
             bytes += m_value_manager.value_width() *(m_bucketsizes[bucket]);
         }
+        bytes += m_overflow.size_in_bytes();
         return bytes; 
     }
 
     void serialize(std::ostream& os) const {
+        m_overflow.serialize(os);
         os.write(reinterpret_cast<const char*>(&m_width), sizeof(decltype(m_width)));
         os.write(reinterpret_cast<const char*>(&m_buckets), sizeof(decltype(m_buckets)));
         os.write(reinterpret_cast<const char*>(&m_elements), sizeof(decltype(m_elements)));
@@ -842,6 +943,7 @@ class separate_chaining_table {
     }
     void deserialize(std::istream& is) {
         clear();
+        m_overflow.deserialize(is);
         decltype(m_buckets) buckets;
         is.read(reinterpret_cast<char*>(&m_width), sizeof(decltype(m_width)));
         m_hash = hash_mapping_type(m_width);
@@ -855,6 +957,7 @@ class separate_chaining_table {
         const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
 
         is.read(reinterpret_cast<char*>(m_bucketsizes), sizeof(bucketsize_type) * cbucket_count);
+
 
         for(size_t bucket = 0; bucket < cbucket_count; ++bucket) {
             if(m_bucketsizes[bucket] == 0) continue;
