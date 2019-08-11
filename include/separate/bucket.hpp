@@ -247,7 +247,7 @@ class plain_bucket {
 #pragma GCC diagnostic pop
 #endif
 
-    void write(const size_t i, const storage_type& key, [[maybe_unused]] const uint_fast8_t width) {
+    void write(const size_t i, const storage_type& key, [[maybe_unused]] const uint_fast8_t width = 0) {
         DCHECK_LT(i, m_length);
         m_data[i] = key;
     }
@@ -255,7 +255,7 @@ class plain_bucket {
         DCHECK_LT(i, m_length);
         return m_data[i];
     }
-    size_t find(const storage_type& key, const size_t length, [[maybe_unused]] const size_t width) const {
+    size_t find(const storage_type& key, const size_t length, [[maybe_unused]] const size_t width = 0) const {
        for(size_t i = 0; i < length; ++i) {
           if(m_data[i] == key) return i;
        }
@@ -355,20 +355,20 @@ class varwidth_bucket {
 
     public:
 
-    void deserialize(std::istream& is, const size_t size, [[maybe_unused]] const uint_fast8_t width) {
+    void deserialize(std::istream& is, const size_t size, const uint_fast8_t width) {
        ON_DEBUG(is.read(reinterpret_cast<char*>(&m_length), sizeof(decltype(m_length))));
        DCHECK_LE(size, m_length);
        const size_t read_length = ceil_div<size_t>(size*width, storage_bitwidth);
        m_data = reinterpret_cast<internal_type*>  (malloc(sizeof(internal_type)*read_length));
        is.read(reinterpret_cast<char*>(m_data), sizeof(internal_type)*read_length);
     }
-    void serialize(std::ostream& os, const size_t size, [[maybe_unused]] const uint_fast8_t width) const {
+    void serialize(std::ostream& os, const size_t size, const uint_fast8_t width) const {
        ON_DEBUG(os.write(reinterpret_cast<const char*>(&m_length), sizeof(decltype(m_length))));
        DCHECK_LE(size, m_length);
        const size_t write_length = ceil_div<size_t>(size*width, storage_bitwidth);
        os.write(reinterpret_cast<const char*>(m_data), sizeof(internal_type)*write_length);
     }
-    static constexpr size_t size_in_bytes(const size_t size, [[maybe_unused]] const size_t width = 0) {
+    static constexpr size_t size_in_bytes(const size_t size, const size_t width = 0) {
        ON_DEBUG(return size*sizeof(internal_type) + sizeof(m_length));
        const size_t length = ceil_div<size_t>(size*width, storage_bitwidth);
        return length*sizeof(internal_type);
@@ -443,6 +443,98 @@ class varwidth_bucket {
         return *this;
     }
 };
+
+// /**!
+//  * The fixwidth_bucket is a varwidth_bucket with a fixed width-size.
+//  * This bucket can be used to store values with fixed but arbitrary bit widths
+// **/
+// template<uint8_t bitwidth, class internal_t = uint8_t>
+// class fixwidth_bucket {
+//     public:
+//
+//     class value_wrapper {
+//        fixwidth_bucket*const m_bucket;
+//        uint64_t m_value;
+//        const uint64_t m_position;
+//
+//        public:
+//        value_wrapper() : m_bucket(nullptr), m_position(0) {}
+//
+//        value_wrapper(fixwidth_bucket*const bucket, uint64_t position, uint64_t value)
+//           : m_bucket(bucket), m_position(position), m_value(value) {}
+//
+//        operator uint64_t() {
+//           return m_value;
+//        }
+//        value_wrapper& operator=(const uint64_t val) {
+//           DCHECK(m_bucket != nullptr);
+//           m_bucket->write(m_position, val);
+//        }
+//        value_wrapper& operator=(const value_wrapper& val) {
+//           return operator=(val.m_value);
+//        }
+//     };
+//
+//     using internal_type = internal_t;
+//     using storage_type = value_wrapper;
+//     static constexpr uint_fast8_t storage_bitwidth = sizeof(internal_type)*8;
+//
+//
+//     private:
+//     varwidth_bucket<internal_t> m_bucket;
+//
+//     public:
+//
+//     void deserialize(std::istream& is, const size_t size, [[maybe_unused]] const uint_fast8_t width) {
+//        m_bucket.deserialize(is, size, bitwidth);
+//     }
+//     void serialize(std::ostream& os, const size_t size, [[maybe_unused]] const uint_fast8_t width) const {
+//        m_bucket.serialize(os,size,bitwidth);
+//     }
+//     static constexpr size_t size_in_bytes(const size_t size, [[maybe_unused]] const size_t width = 0) {
+//       return decltype(m_bucket)::size_in_bytes(size, bitwidth);
+//     }
+//
+//     bool initialized() const { return m_bucket.initialized(); } //!check whether we can add elements to the bucket
+//     void clear() { return m_bucket.clear(); }
+//
+//     fixwidth_bucket() = default;
+//
+//     void initiate(const size_t length, [[maybe_unused]] const uint_fast8_t width = 0) {
+//        return m_bucket.initiate(length, bitwidth);
+//     }
+//
+//     void resize(const size_t oldsize, const size_t length, [[maybe_unused]] const size_t width = 0) {
+//        return m_bucket.resize(oldsize, length, bitwidth);
+//     }
+//
+//     void write(const size_t i, const storage_type key, [[maybe_unused]] const uint_fast8_t width = 0) {
+//        return m_bucket.write(i, key, bitwidth);
+//     }
+//
+//     size_t find(const storage_type& key, const size_t length, [[maybe_unused]] const uint_fast8_t width = 0) const {
+//        return m_bucket.find(key,length,bitwidth);
+//     }
+//
+//
+//     ~fixwidth_bucket() { clear(); }
+//
+//     fixwidth_bucket(fixwidth_bucket&& other) 
+//         : m_bucket(std::move(other.m_bucket))
+//     {
+//     }
+//
+//     fixwidth_bucket& operator=(fixwidth_bucket&& other) {
+//         clear();
+//         m_bucket = std::move(other.m_bucket);
+//         return *this;
+//     }
+//     storage_type operator[](const size_t index) {
+//        return storage_type { this, index,  m_bucket.read(index, bitwidth) };
+//     }
+// };
+
+
 
 }//ns separate_chaining
 

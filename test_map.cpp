@@ -235,8 +235,49 @@ TEST(map, quotienting) {
    separate_chaining_map<plain_bucket<storage_type>, plain_bucket<value_type>, xorshift_hash<key_type, storage_type>, incremental_resize> small_map;
    small_map.reserve(1ULL<<8);
    test_map_id(small_map);
-
 }
+
+
+// template<class T>
+// void test_map_id_value_resticted(T& map, const uint64_t max_value) {
+//    const uint64_t max_key = std::min<uint64_t>(max_value, std::min<uint64_t>(std::numeric_limits<uint16_t>::max(), map.max_key()));
+//
+//    for(size_t i = 0; i < max_key; ++i) {
+//       map[i] = i;
+//    }
+//    for(size_t i = 0; i < max_key; ++i) {
+//       ASSERT_EQ(map[i], i);
+//       ASSERT_EQ(map[i], map[i]);
+//    }
+//    map.shrink_to_fit();
+//    const size_t size = map.size();
+//    for(size_t i = 0; i < max_key; ++i) {
+//       map[i] = i;
+//    }
+//    ASSERT_EQ(map.size(), size);
+//    for(size_t i = 0; i < max_key; ++i) {
+//       ASSERT_EQ(map.erase(i),1ULL);
+//    }
+//    ASSERT_EQ(map.size(), 0ULL);
+// }
+// template<uint8_t value_bitwidth>
+// void test_fixwidth_bucket() {
+//    using storage_type = uint8_t;
+//    using key_type = uint16_t;
+//    separate_chaining_map<plain_bucket<storage_type>, fixwidth_bucket<value_bitwidth, storage_type>, xorshift_hash<key_type, storage_type>, incremental_resize> small_map;
+//    small_map.reserve(1ULL<<8);
+//    test_map_id_value_resticted(small_map, 1ULL<<value_bitwidth);
+// }
+//
+//
+// TEST(bucket, fixwidth_bucket) {
+//    test_fixwidth_bucket<3>();
+//    test_fixwidth_bucket<4>();
+//    test_fixwidth_bucket<7>();
+//    test_fixwidth_bucket<8>();
+//    test_fixwidth_bucket<14>();
+//    test_fixwidth_bucket<16>();
+// }
 
 #define TEST_SMALL_MAP(x,y) \
    TEST(x, iterator) { y; test_map_iterator(map); } \
@@ -268,6 +309,8 @@ TEST_MAP(compact_map_8, compact_chaining_map<hash_mapping_adapter<uint8_t COMMA 
 TEST_MAP(compact_map_32, compact_chaining_map<hash_mapping_adapter<uint32_t COMMA SplitMix> COMMA uint64_t > map(32,64))
 TEST_MAP(compact_map_64, compact_chaining_map<hash_mapping_adapter<uint64_t COMMA SplitMix> COMMA uint64_t > map)
 
+TEST_MAP_FULL(map_var_Xor_64_OverMap, separate_chaining_map<varwidth_bucket<> COMMA plain_bucket<uint32_t> COMMA xorshift_hash<> COMMA incremental_resize COMMA map_overflow> map(64))
+TEST_MAP_FULL(map_var_Xor_64_OverArray, separate_chaining_map<varwidth_bucket<> COMMA plain_bucket<uint32_t> COMMA xorshift_hash<> COMMA incremental_resize COMMA array_overflow> map(64))
 
 TEST_MAP_FULL(map_var_arb_16,  separate_chaining_map<varwidth_bucket<> COMMA plain_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix> COMMA arbitrary_resize> map)
 TEST_MAP_FULL(map_plain_16,  separate_chaining_map<plain_bucket<uint32_t> COMMA plain_bucket<uint16_t> COMMA hash_mapping_adapter<uint32_t COMMA SplitMix> COMMA incremental_resize> map)

@@ -16,7 +16,7 @@ namespace separate_chaining {
         dummy_overflow() { }
 
         static constexpr void resize_buckets(size_t) { }
-        static constexpr bool need_consult() { return false; }
+        static constexpr bool need_consult(size_t) { return false; }
 
         static constexpr size_t size() { return 0; }
         static constexpr size_t capacity() { return 0; }

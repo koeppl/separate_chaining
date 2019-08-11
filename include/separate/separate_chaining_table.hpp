@@ -217,6 +217,7 @@ class null_value_bucket {
     static constexpr void deserialize([[maybe_unused]] std::istream& is, [[maybe_unused]] const size_t length, [[maybe_unused]] const uint_fast8_t width) { }
 
     static constexpr void serialize([[maybe_unused]] std::ostream& os, [[maybe_unused]] const size_t length, [[maybe_unused]] const uint_fast8_t width) { }
+    static constexpr void write([[maybe_unused]] const size_t i, [[maybe_unused]] const storage_type key, [[maybe_unused]] const uint_fast8_t width = 0) {}
 };
 
 
@@ -304,14 +305,15 @@ class value_array_manager {
  * resize_strategy_t: either `arbitrary_resize` or `incremental_resize`
  */
 template<class key_bucket_t, class value_manager_t, class hash_mapping_t, class resize_strategy_t, 
-    class overflow_t = map_overflow<typename hash_mapping_t::key_type, typename value_manager_t::value_bucket_type::storage_type>>
+    template<class K, class V> class overflow_t
+    >
 class separate_chaining_table {
     public:
     using key_bucket_type = key_bucket_t;
     using value_manager_type = value_manager_t;
     using value_bucket_type = typename value_manager_t::value_bucket_type;
     using hash_mapping_type = hash_mapping_t;
-    using overflow_type = overflow_t;
+    using overflow_type = overflow_t<typename hash_mapping_t::key_type, typename value_manager_t::value_bucket_type::storage_type>;
 
     using resize_strategy_type = resize_strategy_t; //! how large a buckets becomes resized
 
@@ -328,7 +330,7 @@ class separate_chaining_table {
 
     using bucketsize_type = separate_chaining::bucketsize_type; //! used for storing the sizes of the buckets
     using size_type = uint64_t; //! used for addressing the i-th bucket
-    using class_type = separate_chaining_table<key_bucket_type, value_manager_type, hash_mapping_type, resize_strategy_type, overflow_type>;
+    using class_type = separate_chaining_table<key_bucket_type, value_manager_type, hash_mapping_type, resize_strategy_type, overflow_t>;
     using iterator = separate_chaining_iterator<class_type>;
     using const_iterator = separate_chaining_iterator<const class_type>;
     using navigator = separate_chaining_navigator<class_type>;
@@ -833,7 +835,7 @@ class separate_chaining_table {
         bucket_keys.write(bucket_size-1, quotient, key_bitwidth);
         DCHECK_EQ(m_hash.inv_map(bucket_keys.read(bucket_size-1, key_bitwidth), bucket, m_buckets), key);
 
-        bucket_values[bucket_size-1] = std::move(value);
+        bucket_values.write(bucket_size-1, std::move(value));
         return { *this, bucket, static_cast<size_t>(bucket_size-1) };
     }
 
@@ -875,7 +877,7 @@ class separate_chaining_table {
         for(size_t i = position+1; i < bucket_size; ++i) {
             bucket_keys.write(i-1, bucket_keys.read(i, key_bitwidth), key_bitwidth);
             ON_DEBUG(bucket_plainkeys[i-1] = bucket_plainkeys[i];)
-            bucket_values[i-1] = bucket_values[i];
+            bucket_values.write(i-1, std::move(bucket_values[i]));
         }
         DCHECK_GT(bucket_size, 0);
         --bucket_size;
@@ -988,12 +990,12 @@ class separate_chaining_table {
 
 
 //! typedef for hash map
-template<class key_bucket_t, class value_bucket_t, class hash_mapping_t, class resize_strategy_t = incremental_resize>
-using separate_chaining_map = separate_chaining_table<key_bucket_t, value_array_manager<value_bucket_t>, hash_mapping_t, resize_strategy_t>;
+template<class key_bucket_t, class value_bucket_t, class hash_mapping_t, class resize_strategy_t = incremental_resize, template<class K, class V> class overflow_t = dummy_overflow>
+using separate_chaining_map = separate_chaining_table<key_bucket_t, value_array_manager<value_bucket_t>, hash_mapping_t, resize_strategy_t, overflow_t>;
 
 //! typedef for hash set
-template<class key_bucket_t, class hash_mapping_t, class resize_strategy_t = incremental_resize> 
-using separate_chaining_set = separate_chaining_table<key_bucket_t, value_dummy_manager, hash_mapping_t, resize_strategy_t>;
+template<class key_bucket_t, class hash_mapping_t, class resize_strategy_t = incremental_resize, template<class K, class V> class overflow_t = dummy_overflow> 
+using separate_chaining_set = separate_chaining_table<key_bucket_t, value_dummy_manager, hash_mapping_t, resize_strategy_t, overflow_t>;
 
 
 typename value_dummy_manager::value_bucket_type value_dummy_manager::m_bucket;
