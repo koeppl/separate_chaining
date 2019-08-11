@@ -15,6 +15,7 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -mtune=native")
 include_directories(include)
 add_subdirectory(external/bit_span)
 include_directories(external/bit_span/include)
+include_directories(external/broadwordsearch/include)
 
 
 ##########

@@ -6,6 +6,10 @@
 
 #include <immintrin.h>
 
+#include "broadwordsearch.hpp"
+
+constexpr uint64_t BROADWORD_SEARCH_THRESHOLD = 0;
+
 namespace separate_chaining {
 
 inline void* aligned_realloc(void*const ptr, const size_t oldsize, const size_t size, const size_t alignment) {
@@ -412,6 +416,11 @@ class varwidth_bucket {
 
     size_t find(const storage_type& key, const size_t length, const uint_fast8_t width) const {
        DCHECK_LE(length*width, m_length*storage_bitwidth);
+       if(length > BROADWORD_SEARCH_THRESHOLD && width < 64) {
+          return broadwordsearch::broadsearch(reinterpret_cast<uint64_t*>(m_data), length, width, key);
+       }
+
+
        uint8_t offset = 0;
        const uint64_t* it = reinterpret_cast<uint64_t*>(m_data);
 
