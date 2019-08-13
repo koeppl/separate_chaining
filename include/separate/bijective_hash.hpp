@@ -133,6 +133,35 @@ private:
   }
 };
 
+class MultiplicativeHash {
+public:
+
+  MultiplicativeHash(uint_fast8_t univ_bits) 
+    : m_bits(univ_bits)
+  {
+      DCHECK_LT(0, m_bits);
+      DCHECK_LE(m_bits, 64);
+      DCHECK_LT(0, mask());
+  }
+  uint64_t operator()(uint64_t x) const { return hash(x); }
+
+  uint64_t hash(uint64_t x) const {
+    DCHECK_LE(x, mask());
+    return (x * PRIME_TABLE[63][0][0]) & mask();
+  }
+
+  uint64_t hash_inv(uint64_t x) const {
+    DCHECK_LE(x, mask());
+    return (x * PRIME_TABLE[63][1][0]) & mask();
+  }
+  uint_fast8_t bits() const { return m_bits; }
+  uint64_t mask() const { return (-1ULL >> (64-m_bits)); }
+
+private:
+  uint_fast8_t m_bits;
+};
+
+
 }} //ns - poplar::bijective_hash
 
 

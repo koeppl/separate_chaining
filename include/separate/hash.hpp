@@ -41,17 +41,17 @@ class hash_mapping_adapter {
     }
 };
 
-template<class key_t = uint64_t, class storage_t = key_t>
-class xorshift_hash {
+template<class key_t = uint64_t, class storage_t = key_t, class bijective_function = bijective_hash::Xorshift>
+class bijective_hash_adapter {
     public:
     using key_type = key_t;
     using storage_type = storage_t;
 
     private:
-    bijective_hash::Xorshift func;
+    bijective_function func;
 
     public:
-    xorshift_hash(const uint_fast8_t width) : func(width) { }
+    bijective_hash_adapter(const uint_fast8_t width) : func(width) { }
 
     uint_fast8_t remainder_width(const uint_fast8_t table_buckets) const {
         DCHECK_LT(table_buckets, func.bits()); //! the hash table needs a remainder of at least one bit
@@ -72,5 +72,8 @@ class xorshift_hash {
     }
 };
 
+template<class key_t = uint64_t, class storage_t = key_t> using xorshift_hash = bijective_hash_adapter<key_t, storage_t, bijective_hash::Xorshift>;
+
+template<class key_t = uint64_t, class storage_t = key_t> using multiplicative_hash = bijective_hash_adapter<key_t, storage_t, bijective_hash::MultiplicativeHash>;
 
 }//ns separate_chaining

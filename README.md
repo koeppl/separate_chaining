@@ -58,6 +58,11 @@ It combines the key and the value bucket in a single bucket (and thus using only
 The bucket is first filled with the keys, and then subsequently with the values.
 It can also store values of arbitrary bit widths (not necessarily quantisized by eight).
 
+## Global Constants
+
+You can specify the following macros to overwrite the behavior of the hash table:
+- `SEPARATE_MAX_BUCKET_SIZE` : Changes the number of maximum elements a bucket can store. Use a value between 1 and 255.
+
 ## Key Splitting
 
 Given the bit widths of the keys has an interesting distribution, it is also possible to combine several hash tables with an adapter, such that each hash table is 
