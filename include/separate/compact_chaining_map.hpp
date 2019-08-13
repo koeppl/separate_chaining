@@ -9,7 +9,7 @@ namespace separate_chaining {
     template<class storage_type>
     inline static void write_compact_int(storage_type* storage, const uint64_t bitposition, const uint8_t bitwidth, const uint64_t value) {
         constexpr size_t storage_bitwidth = sizeof(storage_type)*8;
-        DCHECK_LT(storage_bitwidth, std::numeric_limits<uint8_t>::max());
+        DDCHECK_LT(storage_bitwidth, std::numeric_limits<uint8_t>::max());
 
         uint64_t* word = reinterpret_cast<uint64_t*>(storage + bitposition / storage_bitwidth);
         const uint8_t offset = bitposition % storage_bitwidth;
@@ -214,12 +214,12 @@ class compact_chaining_map {
         , m_value_width(value_width)
         , m_hash(m_key_width) 
     {
-        DCHECK_GT(key_width, 1);
-        DCHECK_LE(key_width, 64);
-        DCHECK_LE(key_width, 8*sizeof(key_type));
-        DCHECK_GT(value_width, 1);
-        DCHECK_LE(value_width, 64);
-        // DCHECK_LE(width, sizeof(key_type)*8);
+        DDCHECK_GT(key_width, 1);
+        DDCHECK_LE(key_width, 64);
+        DDCHECK_LE(key_width, 8*sizeof(key_type));
+        DDCHECK_GT(value_width, 1);
+        DDCHECK_LE(value_width, 64);
+        // DDCHECK_LE(width, sizeof(key_type)*8);
     }
 
     compact_chaining_map(compact_chaining_map&& other)
@@ -240,7 +240,7 @@ class compact_chaining_map {
     }
 
     compact_chaining_map& operator=(compact_chaining_map&& other) {
-        // DCHECK_EQ(m_key_width, other.m_key_width);
+        // DDCHECK_EQ(m_key_width, other.m_key_width);
         clear();
         m_key_width       = std::move(other.m_key_width);
         m_value_width       = std::move(other.m_value_width);
@@ -259,7 +259,7 @@ class compact_chaining_map {
         return *this;
     }
     void swap(compact_chaining_map& other) {
-        // DCHECK_EQ(m_key_width, other.m_key_width);
+        // DDCHECK_EQ(m_key_width, other.m_key_width);
         ON_DEBUG(std::swap(m_plainkeys, other.m_plainkeys);)
         ON_DEBUG(std::swap(m_plainvalues, other.m_plainvalues);)
         ON_DEBUG(std::swap(m_storagesizes,other.m_storagesizes);)
@@ -324,18 +324,18 @@ class compact_chaining_map {
 #endif
             const size_t cbucket_count = bucket_count();
             const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
-            DCHECK_GT(key_bitwidth, 0);
-            DCHECK_LE(key_bitwidth, key_bit_width());
+            DDCHECK_GT(key_bitwidth, 0);
+            DDCHECK_LE(key_bitwidth, key_bit_width());
 
             for(size_t bucket_it = 0; bucket_it < cbucket_count; ++bucket_it) {
                 if(m_bucketsizes[bucket_it] == 0) continue;
                 for(size_t i = 0; i < m_bucketsizes[bucket_it]; ++i) {
                     const key_type read_quotient = quotient_at(bucket_it, i, key_bitwidth);
                     const key_type read_key = m_hash.inv_map(read_quotient, bucket_it, m_buckets);
-                    DCHECK_EQ(read_key, m_plainkeys[bucket_it][i]);
+                    DDCHECK_EQ(read_key, m_plainkeys[bucket_it][i]);
 
                     value_type read_value = value_at(bucket_it, i);
-                    DCHECK_EQ(read_value, m_plainvalues[bucket_it][i]);
+                    DDCHECK_EQ(read_value, m_plainvalues[bucket_it][i]);
 
                     tmp_map.find_or_insert(read_key, std::move(read_value));
                 }
@@ -409,7 +409,7 @@ class compact_chaining_map {
     const_iterator find(const key_type& key) const {
         if(m_buckets == 0) return cend();
         const auto [quotient, bucket] = m_hash.map(key, m_buckets);
-        DCHECK_EQ(m_hash.inv_map(quotient, bucket, m_buckets), key);
+        DDCHECK_EQ(m_hash.inv_map(quotient, bucket, m_buckets), key);
         const size_t position = locate(bucket, quotient);
         if(position == static_cast<size_t>(-1ULL)) {
             return cend();
@@ -418,17 +418,17 @@ class compact_chaining_map {
     }
 
     key_type quotient_at(const size_t bucket, const size_t position, const size_t quotient_width) const {
-        DCHECK_LT((static_cast<size_t>(position)*quotient_width)/storage_bitwidth + ((position)* quotient_width) % storage_bitwidth, storage_bitwidth*ceil_div<size_t>(m_bucketsizes[bucket]*quotient_width, storage_bitwidth) );
+        DDCHECK_LT((static_cast<size_t>(position)*quotient_width)/storage_bitwidth + ((position)* quotient_width) % storage_bitwidth, storage_bitwidth*ceil_div<size_t>(m_bucketsizes[bucket]*quotient_width, storage_bitwidth) );
         // const key_type ret2 = tdc::tdc_sdsl::bits_impl<>::read_int
         //     (reinterpret_cast<uint64_t*>(m_storage[bucket] + (static_cast<size_t>(position)*quotient_width)/storage_bitwidth)
         //     , ((position)* quotient_width) % storage_bitwidth
         //     , quotient_width);
-        // DCHECK_EQ(ret, ret2);
+        // DDCHECK_EQ(ret, ret2);
 
-        DCHECK_LE(position*quotient_width+quotient_width, m_storagesizes[bucket]);
+        DDCHECK_LE(position*quotient_width+quotient_width, m_storagesizes[bucket]);
         const key_type ret = read_compact_int(m_storage[bucket], position*quotient_width, quotient_width);
-        DCHECK_EQ(ret, read_compact_int(m_storage[bucket], position*quotient_width, quotient_width));
-        DCHECK_EQ(ret, m_large_storage[bucket][position]);
+        DDCHECK_EQ(ret, read_compact_int(m_storage[bucket], position*quotient_width, quotient_width));
+        DDCHECK_EQ(ret, m_large_storage[bucket][position]);
         return ret;
     }
     public:
@@ -440,26 +440,26 @@ class compact_chaining_map {
         const uint_fast8_t quotient_bitwidth = m_hash.remainder_width(m_buckets);
 
         const size_t bit_position = m_bucketsizes[bucket]*quotient_bitwidth + position*value_bit_width(); 
-        DCHECK_LE(bit_position+value_bit_width(), m_storagesizes[bucket]);
+        DDCHECK_LE(bit_position+value_bit_width(), m_storagesizes[bucket]);
         value_type ret = read_compact_int(m_storage[bucket], bit_position, value_bit_width());
 
-        DCHECK_EQ(ret, m_large_storage[bucket][m_bucketsizes[bucket]+position]);
-        DCHECK_EQ(ret, m_plainvalues[bucket][position]);
+        DDCHECK_EQ(ret, m_large_storage[bucket][m_bucketsizes[bucket]+position]);
+        DDCHECK_EQ(ret, m_plainvalues[bucket][position]);
 
         return ret;
     }
 
     void write_quotient(const size_t bucket, const size_t position, const uint_fast8_t quotient_width, const key_type quotient) const {
         ON_DEBUG(m_large_storage[bucket][position] = quotient;)
-        DCHECK_EQ(m_large_storage[bucket][position], quotient);
-        DCHECK_LT((static_cast<size_t>(position)*quotient_width)/storage_bitwidth + ((position)* quotient_width) % storage_bitwidth, storage_bitwidth*ceil_div<size_t>(m_bucketsizes[bucket]*quotient_width, storage_bitwidth) );
-        DCHECK_LE(most_significant_bit(quotient), quotient_width);
+        DDCHECK_EQ(m_large_storage[bucket][position], quotient);
+        DDCHECK_LT((static_cast<size_t>(position)*quotient_width)/storage_bitwidth + ((position)* quotient_width) % storage_bitwidth, storage_bitwidth*ceil_div<size_t>(m_bucketsizes[bucket]*quotient_width, storage_bitwidth) );
+        DDCHECK_LE(most_significant_bit(quotient), quotient_width);
 
-        DCHECK_LE(position*quotient_width+quotient_width, m_storagesizes[bucket]);
+        DDCHECK_LE(position*quotient_width+quotient_width, m_storagesizes[bucket]);
 
         storage_type*& small_storage = m_storage[bucket];
         write_compact_int(small_storage, position*quotient_width, quotient_width, quotient);
-        DCHECK_EQ(read_compact_int(small_storage, position*quotient_width, quotient_width), quotient);
+        DDCHECK_EQ(read_compact_int(small_storage, position*quotient_width, quotient_width), quotient);
     }
 
 
@@ -468,10 +468,10 @@ class compact_chaining_map {
 
         const uint_fast8_t quotient_bitwidth = m_hash.remainder_width(m_buckets);
         const size_t write_position = m_bucketsizes[bucket]*quotient_bitwidth + position*value_bit_width(); // position in bits
-        DCHECK_LE(write_position+value_bit_width(), m_storagesizes[bucket]);
+        DDCHECK_LE(write_position+value_bit_width(), m_storagesizes[bucket]);
 
         write_compact_int(m_storage[bucket], write_position, value_bit_width(), value);
-        DCHECK_EQ(m_large_storage[bucket][m_bucketsizes[bucket]+position], value);
+        DDCHECK_EQ(m_large_storage[bucket][m_bucketsizes[bucket]+position], value);
         ON_DEBUG(m_plainvalues[bucket][position] = value);
     }
 
@@ -491,7 +491,7 @@ class compact_chaining_map {
     void enlarge_storage(const size_t bucket, uint_fast8_t quotient_bitwidth) {
         bucketsize_type& bucket_size = m_bucketsizes[bucket];
         const bucketsize_type old_bucket_size = bucket_size;
-        DCHECK_LT(bucket_size, std::numeric_limits<bucketsize_type>::max());
+        DDCHECK_LT(bucket_size, std::numeric_limits<bucketsize_type>::max());
         ++bucket_size;
 
         realloc_bucket(bucket, bucket_size-1, quotient_bitwidth);
@@ -507,7 +507,7 @@ class compact_chaining_map {
             const size_t to_bit_position = bucket_size*quotient_bitwidth + (old_bucket_size - i)*value_bit_width();
             const uint64_t read_value = read_compact_int(small_storage, from_bit_position, value_bit_width());
 
-            DCHECK_LE(to_bit_position+value_bit_width(), m_storagesizes[bucket]);
+            DDCHECK_LE(to_bit_position+value_bit_width(), m_storagesizes[bucket]);
             write_compact_int(small_storage, to_bit_position, value_bit_width(), read_value);
         }
 
@@ -525,9 +525,9 @@ class compact_chaining_map {
 
     size_t locate(const size_t& bucket, const key_type& quotient) const {
         const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
-        DCHECK_GT(key_bitwidth, 0);
-        DCHECK_LE(key_bitwidth, key_bit_width());
-        DCHECK_LE(most_significant_bit(quotient), key_bitwidth);
+        DDCHECK_GT(key_bitwidth, 0);
+        DDCHECK_LE(key_bitwidth, key_bit_width());
+        DDCHECK_LE(most_significant_bit(quotient), key_bitwidth);
 
         bucketsize_type& bucket_size = m_bucketsizes[bucket];
 
@@ -536,7 +536,7 @@ class compact_chaining_map {
         for(size_t i = 0; i < bucket_size; ++i) { 
             const key_type read_quotient = quotient_at(bucket, i, key_bitwidth);
             ON_DEBUG(const key_type read_key = m_hash.inv_map(read_quotient, bucket, m_buckets);)
-            DCHECK_EQ(read_key , bucket_plainkeys[i]);
+            DDCHECK_EQ(read_key , bucket_plainkeys[i]);
             if(read_quotient  == quotient) {
                 position = i;
                 break;
@@ -545,7 +545,7 @@ class compact_chaining_map {
 
 #ifndef NDEBUG
         if(position != static_cast<size_t>(-1ULL)) {
-            DCHECK_LT(position, bucket_size);
+            DDCHECK_LT(position, bucket_size);
             return position;
         }
 #endif//NDEBUG
@@ -561,22 +561,22 @@ class compact_chaining_map {
     std::pair<size_t, size_t> locate(const key_type& key) const {
         if(m_buckets == 0) throw std::runtime_error("cannot query empty hash table");
         const auto [quotient, bucket] = m_hash.map(key, m_buckets);
-        DCHECK_EQ(m_hash.inv_map(quotient, bucket, m_buckets), key);
+        DDCHECK_EQ(m_hash.inv_map(quotient, bucket, m_buckets), key);
 
         return { bucket, locate(bucket, quotient) };
     }
 
     navigator find_or_insert(const key_type& key, value_type&& value) {
-        DCHECK_GT(key_bit_width(), 1);
+        DDCHECK_GT(key_bit_width(), 1);
         if(m_buckets == 0) reserve(std::min<size_t>(key_bit_width()-1, separate_chaining::INITIAL_BUCKETS));
         const auto [quotient, bucket] = m_hash.map(key, m_buckets);
-        DCHECK_EQ(m_hash.inv_map(quotient, bucket, m_buckets), key);
+        DDCHECK_EQ(m_hash.inv_map(quotient, bucket, m_buckets), key);
 
         bucketsize_type& bucket_size = m_bucketsizes[bucket];
         const size_t position = locate(bucket, quotient);
 
         if(position != static_cast<size_t>(-1ULL)) {
-            DCHECK_LT(position, bucket_size);
+            DDCHECK_LT(position, bucket_size);
             return { *this, bucket ,position };
         }
 
@@ -591,8 +591,8 @@ class compact_chaining_map {
         ++m_elements;
 
         const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
-        DCHECK_GT(key_bitwidth, 0);
-        DCHECK_LE(key_bitwidth, key_bit_width());
+        DDCHECK_GT(key_bitwidth, 0);
+        DDCHECK_LE(key_bitwidth, key_bit_width());
 
         const size_t former_bucket_size = bucket_size;
 
@@ -608,8 +608,8 @@ class compact_chaining_map {
         for(size_t i = 0; i < bucket_size; ++i) {
             const key_type read_quotient = quotient_at(bucket, i, key_bitwidth);
             const key_type read_key = m_hash.inv_map(read_quotient, bucket, m_buckets);
-            DCHECK_EQ(read_key, bucket_plainkeys[i]);
-            DCHECK_EQ(value_at(bucket, i), bucket_plainvalues[i]);
+            DDCHECK_EQ(read_key, bucket_plainkeys[i]);
+            DDCHECK_EQ(value_at(bucket, i), bucket_plainvalues[i]);
         }
 #endif
         return { *this, bucket, static_cast<size_t>(bucket_size-1) };
@@ -636,15 +636,15 @@ class compact_chaining_map {
         ON_DEBUG(value_type*& bucket_plainvalues = m_plainvalues[bucket];)
 
         const uint_fast8_t quotient_bitwidth = m_hash.remainder_width(m_buckets);
-        DCHECK_GT(quotient_bitwidth, 0);
-        DCHECK_LE(quotient_bitwidth, key_bit_width());
+        DDCHECK_GT(quotient_bitwidth, 0);
+        DDCHECK_LE(quotient_bitwidth, key_bit_width());
 
 #ifndef NDEBUG
         for(size_t i = 0; i < bucket_size; ++i) {
             const key_type read_quotient = quotient_at(bucket, i, quotient_bitwidth);
             const key_type read_key = m_hash.inv_map(read_quotient, bucket, m_buckets);
-            DCHECK_EQ(read_key, bucket_plainkeys[i]);
-            DCHECK_EQ(value_at(bucket, i), bucket_plainvalues[i]);
+            DDCHECK_EQ(read_key, bucket_plainkeys[i]);
+            DDCHECK_EQ(value_at(bucket, i), bucket_plainvalues[i]);
         }
 #endif
 
@@ -679,7 +679,7 @@ class compact_chaining_map {
             const size_t to_bit_position = (bucket_size-1)*quotient_bitwidth + (i)*value_bit_width();
             const uint64_t read_value = read_compact_int(small_storage, from_bit_position, value_bit_width());
 
-            DCHECK_LE(to_bit_position+value_bit_width(), m_storagesizes[bucket]);
+            DDCHECK_LE(to_bit_position+value_bit_width(), m_storagesizes[bucket]);
             write_compact_int(small_storage, to_bit_position, value_bit_width(), read_value);
         }
         for(size_t i = position+1; i < bucket_size; ++i) {
@@ -687,12 +687,12 @@ class compact_chaining_map {
             const size_t to_bit_position = (bucket_size-1)*quotient_bitwidth + (i-1)*value_bit_width();
             const uint64_t read_value = read_compact_int(small_storage, from_bit_position, value_bit_width());
 
-            DCHECK_LE(to_bit_position+value_bit_width(), m_storagesizes[bucket]);
+            DDCHECK_LE(to_bit_position+value_bit_width(), m_storagesizes[bucket]);
             write_compact_int(small_storage, to_bit_position, value_bit_width(), read_value);
         }
 
 
-        DCHECK_GT(bucket_size, 0);
+        DDCHECK_GT(bucket_size, 0);
         --bucket_size;
         realloc_bucket(bucket, bucket_size+1, quotient_bitwidth);
         --m_elements;
@@ -703,8 +703,8 @@ class compact_chaining_map {
         for(size_t i = 0; i < bucket_size; ++i) {
             const key_type read_quotient = quotient_at(bucket, i, quotient_bitwidth);
             const key_type read_key = m_hash.inv_map(read_quotient, bucket, m_buckets);
-            DCHECK_EQ(read_key, bucket_plainkeys[i]);
-            DCHECK_EQ(value_at(bucket, i), bucket_plainvalues[i]);
+            DDCHECK_EQ(read_key, bucket_plainkeys[i]);
+            DDCHECK_EQ(value_at(bucket, i), bucket_plainvalues[i]);
         }
 #endif
 

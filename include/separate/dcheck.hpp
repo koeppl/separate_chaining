@@ -14,39 +14,39 @@
 #define ON_DEBUG(x) x
 #endif
 
-#ifdef DCHECK
-#undef DCHECK
-#undef DCHECK_EQ
-#undef DCHECK_NE
-#undef DCHECK_LE
-#undef DCHECK_LT
-#undef DCHECK_GE
-#undef DCHECK_GT
+#ifdef DDCHECK
+#undef DDCHECK
+#undef DDCHECK_EQ
+#undef DDCHECK_NE
+#undef DDCHECK_LE
+#undef DDCHECK_LT
+#undef DDCHECK_GE
+#undef DDCHECK_GT
 #endif
 
-#ifndef DCHECK
+#ifndef DDCHECK
 #ifdef NDEBUG
-#define DCHECK_(x,y,z)
-#define DCHECK(x) 
-#define DCHECK_EQ(x, y) 
-#define DCHECK_NE(x, y) 
-#define DCHECK_LE(x, y) 
-#define DCHECK_LT(x, y) 
-#define DCHECK_GE(x, y) 
-#define DCHECK_GT(x, y) 
+#define DDCHECK_(x,y,z)
+#define DDCHECK(x) 
+#define DDCHECK_EQ(x, y) 
+#define DDCHECK_NE(x, y) 
+#define DDCHECK_LE(x, y) 
+#define DDCHECK_LT(x, y) 
+#define DDCHECK_GE(x, y) 
+#define DDCHECK_GT(x, y) 
 #else//NDEBUG
-#define DCHECK_(x,y,z) \
+#define DDCHECK_(x,y,z) \
   if (!(x)) throw std::runtime_error(std::string(" in file ") + __FILE__ + ':' + std::to_string(__LINE__) + (" the check failed: " #x) + ", we got " + std::to_string(y) + " vs " + std::to_string(z))
-#define DCHECK(x) \
+#define DDCHECK(x) \
   if (!(x)) throw std::runtime_error(std::string(" in file ") + __FILE__ + ':' + std::to_string(__LINE__) + (" the check failed: " #x))
-#define DCHECK_EQ(x, y) DCHECK_((x) == (y), x,y)
-#define DCHECK_NE(x, y) DCHECK_((x) != (y), x,y)
-#define DCHECK_LE(x, y) DCHECK_((x) <= (y), x,y)
-#define DCHECK_LT(x, y) DCHECK_((x) < (y) ,x,y)
-#define DCHECK_GE(x, y) DCHECK_((x) >= (y),x,y )
-#define DCHECK_GT(x, y) DCHECK_((x) > (y) ,x,y)
+#define DDCHECK_EQ(x, y) DDCHECK_((x) == (y), x,y)
+#define DDCHECK_NE(x, y) DDCHECK_((x) != (y), x,y)
+#define DDCHECK_LE(x, y) DDCHECK_((x) <= (y), x,y)
+#define DDCHECK_LT(x, y) DDCHECK_((x) < (y) ,x,y)
+#define DDCHECK_GE(x, y) DDCHECK_((x) >= (y),x,y )
+#define DDCHECK_GT(x, y) DDCHECK_((x) > (y) ,x,y)
 #endif //NDEBUG
-#endif //DCHECK
+#endif //DDCHECK
 
 
 // namespace std {

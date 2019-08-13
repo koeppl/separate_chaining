@@ -56,16 +56,16 @@ class arbitrary_resize {
         return *this;
     }
     void assign(const size_t size, const size_t bucket) {
-        DCHECK(m_maxbucketsizes != nullptr);
-        DCHECK_LT(bucket, m_buckets);
+        DDCHECK(m_maxbucketsizes != nullptr);
+        DDCHECK_LT(bucket, m_buckets);
         m_maxbucketsizes[bucket] = size;
     }
     size_t size([[maybe_unused]]const size_t current_size, const size_t bucket) const {
-        DCHECK_LT(bucket, m_buckets);
+        DDCHECK_LT(bucket, m_buckets);
         return m_maxbucketsizes[bucket];
     }
     void allocate(const size_t new_size)  {
-        DCHECK(m_maxbucketsizes == nullptr);
+        DDCHECK(m_maxbucketsizes == nullptr);
         m_maxbucketsizes  = reinterpret_cast<bucketsize_type*>  (malloc(new_size*sizeof(bucketsize_type)));
         std::fill(m_maxbucketsizes, m_maxbucketsizes+new_size, static_cast<bucketsize_type>(0));
         ON_DEBUG(m_buckets = new_size;)
@@ -75,9 +75,9 @@ class arbitrary_resize {
     }
 
     bucketsize_type size_after_increment(const bucketsize_type newsize, const size_t bucket) {
-        DCHECK_LT(bucket, m_buckets);
-        DCHECK_LE(newsize, std::numeric_limits<bucketsize_type>::max());
-        DCHECK_LE(static_cast<size_t>(resize(newsize)),std::numeric_limits<bucketsize_type>::max());
+        DDCHECK_LT(bucket, m_buckets);
+        DDCHECK_LE(newsize, std::numeric_limits<bucketsize_type>::max());
+        DDCHECK_LE(static_cast<size_t>(resize(newsize)),std::numeric_limits<bucketsize_type>::max());
         return m_maxbucketsizes[bucket] = resize(newsize);
     }
     void clear() {

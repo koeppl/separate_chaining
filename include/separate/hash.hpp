@@ -54,17 +54,17 @@ class bijective_hash_adapter {
     bijective_hash_adapter(const uint_fast8_t width) : func(width) { }
 
     uint_fast8_t remainder_width(const uint_fast8_t table_buckets) const {
-        DCHECK_LT(table_buckets, func.bits()); //! the hash table needs a remainder of at least one bit
+        DDCHECK_LT(table_buckets, func.bits()); //! the hash table needs a remainder of at least one bit
         return func.bits() - table_buckets;
     }
     
     std::pair<storage_type, size_t> map(const key_type& key, const uint_fast8_t table_buckets) const {
         const size_t hash_value = func.hash(key);
-        DCHECK_EQ(func.hash_inv(hash_value), key);
-        DCHECK_LE(hash_value >> table_buckets, std::numeric_limits<storage_type>::max());
+        DDCHECK_EQ(func.hash_inv(hash_value), key);
+        DDCHECK_LE(hash_value >> table_buckets, std::numeric_limits<storage_type>::max());
         //TODO: swap both entries, as H[i] can then be mapped directly to H[2i] and H[2i+1] on a resize
         const auto ret = std::make_pair(hash_value >> table_buckets, hash_value & ((1ULL << table_buckets) - 1ULL) );
-        DCHECK_EQ(inv_map(ret.first, ret.second, table_buckets), key);
+        DDCHECK_EQ(inv_map(ret.first, ret.second, table_buckets), key);
         return ret;
     }
     key_type inv_map(const storage_type remainder, const size_t hash_value, const uint8_t table_buckets) const {

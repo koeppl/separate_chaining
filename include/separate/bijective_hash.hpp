@@ -83,14 +83,14 @@ public:
     : m_bits(univ_bits)
     , m_shift(univ_bits / 2 + 1)
   {
-      DCHECK_LT(0, m_bits);
-      DCHECK_LE(m_bits, 64);
-      DCHECK_LT(0, mask());
+      DDCHECK_LT(0, m_bits);
+      DDCHECK_LE(m_bits, 64);
+      DDCHECK_LT(0, mask());
   }
   uint64_t operator()(uint64_t x) const { return hash(x); }
 
   uint64_t hash(uint64_t x) const {
-    DCHECK_LE(x, mask());
+    DDCHECK_LE(x, mask());
     x = hash_<0>(x);
     x = hash_<1>(x);
     x = hash_<2>(x);
@@ -98,7 +98,7 @@ public:
   }
 
   uint64_t hash_inv(uint64_t x) const {
-    DCHECK_LE(x, mask());
+    DDCHECK_LE(x, mask());
     x = hash_inv_<2>(x);
     x = hash_inv_<1>(x);
     x = hash_inv_<0>(x);
@@ -120,7 +120,7 @@ private:
 
   template <uint_fast8_t N>
   uint64_t hash_(uint64_t x) const {
-    DCHECK_LE(x, mask());
+    DDCHECK_LE(x, mask());
     x = x ^ (x >> (m_shift + N));
     x = (x * PRIME_TABLE[bits()][0][N]) & mask();
     return x;
@@ -139,19 +139,19 @@ public:
   MultiplicativeHash(uint_fast8_t univ_bits) 
     : m_bits(univ_bits)
   {
-      DCHECK_LT(0, m_bits);
-      DCHECK_LE(m_bits, 64);
-      DCHECK_LT(0, mask());
+      DDCHECK_LT(0, m_bits);
+      DDCHECK_LE(m_bits, 64);
+      DDCHECK_LT(0, mask());
   }
   uint64_t operator()(uint64_t x) const { return hash(x); }
 
   uint64_t hash(uint64_t x) const {
-    DCHECK_LE(x, mask());
+    DDCHECK_LE(x, mask());
     return (x * PRIME_TABLE[63][0][0]) & mask();
   }
 
   uint64_t hash_inv(uint64_t x) const {
-    DCHECK_LE(x, mask());
+    DDCHECK_LE(x, mask());
     return (x * PRIME_TABLE[63][1][0]) & mask();
   }
   uint_fast8_t bits() const { return m_bits; }

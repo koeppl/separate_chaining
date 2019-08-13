@@ -1,6 +1,10 @@
 #pragma once
 #include <tudocomp/ds/IntVector.hpp>
 
+#ifndef ARRAY_OVERFLOW_LENGTH
+constexpr size_t ARRAY_OVERFLOW_LENGTH = 16;
+#endif
+
 namespace separate_chaining {
 
   template<class key_t, class value_t>
@@ -30,9 +34,7 @@ namespace separate_chaining {
         }
         static constexpr bool valid_position(size_t) { return false; } //! is position a valid entry of the table?
 
-        static constexpr size_t size_in_bytes(const size_t) {
-            return 0;
-        }
+        static constexpr size_t size_in_bytes() { return 0; }
         static constexpr void clear() { }
         static constexpr size_t insert(const size_t bucket, const key_type&, const value_type&) { return 0; }
         static constexpr size_t find(const key_type&) {
@@ -66,7 +68,7 @@ namespace separate_chaining {
         private:
         plain_bucket<key_type> m_keys;
         plain_bucket<value_type> m_values;
-        static constexpr uint_fast8_t m_length = 16;
+        static constexpr uint_fast8_t m_length = ARRAY_OVERFLOW_LENGTH;
         uint_fast8_t m_elements = 0;
 
         public:
@@ -100,8 +102,8 @@ namespace separate_chaining {
             m_values.serialize(os, m_elements, 0);
         }
 
-        static constexpr size_t size_in_bytes(const size_t size) {
-            return decltype(m_keys)::size_in_bytes(size, 0) + decltype(m_values)::size_in_bytes(size, 0) + 1;
+        size_t size_in_bytes() const {
+            return m_bucketfull.bit_size()/8 + decltype(m_keys)::size_in_bytes(m_length, 0) + decltype(m_values)::size_in_bytes(m_length, 0) + 1;
         }
         void clear() {
             m_keys.clear();
@@ -220,9 +222,6 @@ namespace separate_chaining {
             }
         }
 
-        static constexpr size_t size_in_bytes(const size_t size) {
-          return -1; //TODO
-        }
         void clear() {
           m_map.clear();
         }
@@ -264,6 +263,9 @@ namespace separate_chaining {
         const key_type& key(const size_t index) const {
             DCHECK_LT(index, m_length);
             return m_map.begin(index)->first;
+        }
+        size_t size_in_bytes() const {
+            return m_bucketfull.bit_size()/8 + sizeof(std::pair<key_type,value_type>) * m_map.max_size();
         }
 
     };
