@@ -68,7 +68,7 @@ namespace separate_chaining {
         private:
         plain_bucket<key_type> m_keys;
         plain_bucket<value_type> m_values;
-        static constexpr uint_fast8_t m_length = ARRAY_OVERFLOW_LENGTH;
+        static constexpr size_t m_length = ARRAY_OVERFLOW_LENGTH;
         uint_fast8_t m_elements = 0;
 
         public:
