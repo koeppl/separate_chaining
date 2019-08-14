@@ -2,7 +2,7 @@
 #include <tudocomp/ds/IntVector.hpp>
 
 #ifndef ARRAY_OVERFLOW_LENGTH
-constexpr size_t ARRAY_OVERFLOW_LENGTH = 16;
+constexpr size_t ARRAY_OVERFLOW_LENGTH = 256;
 #endif
 
 namespace separate_chaining {
@@ -25,6 +25,7 @@ namespace separate_chaining {
         static constexpr size_t size() { return 0; }
         static constexpr size_t capacity() { return 0; }
 
+        static constexpr size_t first_position() { return 0; }
         static constexpr size_t next_position(const size_t position) { return position; }
         static constexpr size_t previous_position(const size_t position) { return position; }
 
@@ -69,7 +70,8 @@ namespace separate_chaining {
         plain_bucket<key_type> m_keys;
         plain_bucket<value_type> m_values;
         static constexpr size_t m_length = ARRAY_OVERFLOW_LENGTH;
-        uint_fast8_t m_elements = 0;
+        size_t m_elements = 0;
+        tdc::BitVector m_bucketfull;
 
         public:
         size_t size() const { return m_elements; }
@@ -82,6 +84,7 @@ namespace separate_chaining {
             m_values.initiate(m_length, 0);
         }
 
+        static constexpr size_t first_position() { return 0; }
         size_t next_position(const size_t position) const { 
           DCHECK_LT(position, m_length);
           return position+1;
@@ -131,7 +134,6 @@ namespace separate_chaining {
             m_values[m_elements] = value;
             return m_elements++;
         }
-        tdc::BitVector m_bucketfull;
         void resize_buckets(size_t bucketcount) {
           m_bucketfull.resize(bucketcount);
         }
@@ -172,11 +174,11 @@ namespace separate_chaining {
 
         private:
         std::unordered_map<key_type, value_type> m_map;
-        size_t m_length = 0;
+        tdc::BitVector m_bucketfull;
 
         public:
         size_t size() const { return m_map.size(); }
-        size_t capacity() const { return m_length; }
+        size_t capacity() const { return m_map.bucket_count(); }
         
         map_overflow() {
           m_map.max_load_factor(1);
@@ -184,6 +186,12 @@ namespace separate_chaining {
 
         bool valid_position(const size_t position) const { 
           return position < m_map.bucket_count() && m_map.begin(position) != m_map.end(position); 
+        }
+
+        size_t first_position() const {  // TODO: major bottleneck!
+          size_t position = 0;
+          for(position = 0; position < m_map.bucket_count() && m_map.begin(position) == m_map.end(position); ++position) {}
+          return position;
         }
         size_t next_position(size_t position) const { 
           DCHECK_LT(position,m_map.bucket_count());
@@ -231,17 +239,19 @@ namespace separate_chaining {
         }
 
         size_t insert(const size_t bucket, const key_type& key, const value_type& value) {
-            DCHECK_LT(m_map.size(), m_length);
             m_bucketfull[bucket] = true;
             const size_t mybucket = m_map.bucket(key);
-            if(m_map.begin(mybucket) == m_map.end(mybucket)) return static_cast<size_t>(-1ULL); // cannot insert as there is already an element present
+            if(m_map.begin(mybucket) != m_map.end(mybucket)) return static_cast<size_t>(-1ULL); // cannot insert as there is already an element present
             m_map[key] = value;
-            return m_map.bucket(key);
+            const size_t position = m_map.bucket(key); // TODO: major bottleneck!
+            DCHECK(m_map.begin(position) != m_map.end(position));
+            DCHECK_EQ(this->key(position), key);
+            DCHECK_EQ(operator[](position), value);
+            return position;
         }
-        tdc::BitVector m_bucketfull;
         void resize_buckets(size_t bucketcount) {
-          m_length = bucketcount; // sets the max. number of elements to the number of buckets in the hash table
           m_map.reserve(bucketcount);
+          DCHECK_GE(m_map.bucket_count(), bucketcount); // sets the max. number of elements to the number of buckets in the hash table
           m_bucketfull.resize(bucketcount);
         }
         
@@ -250,22 +260,29 @@ namespace separate_chaining {
           return m_bucketfull[bucket];
         }
         size_t find(const key_type& key) const { // returns position of key
-            return m_map.bucket(key);
+            const size_t position = m_map.bucket(key);
+            DCHECK_LE(std::distance(m_map.begin(position), m_map.end(position)), 1);
+            if(m_map.begin(position) == m_map.end(position)) return static_cast<size_t>(-1ULL);
+            if(m_map.begin(position)->first != key) return static_cast<size_t>(-1ULL);
+            return position;
         }
         value_type& operator[](const size_t index) { // returns value
             DCHECK_LT(index, m_map.bucket_count());
+            DCHECK_EQ(std::distance(m_map.begin(index), m_map.end(index)), 1);
             return m_map.begin(index)->second;
         }
         const value_type& operator[](const size_t index) const {
-            DCHECK_LT(index, m_length);
+            DCHECK_LT(index, m_map.bucket_count());
+            DCHECK_EQ(std::distance(m_map.begin(index), m_map.end(index)), 1);
             return m_map.begin(index)->second;
         }
         const key_type& key(const size_t index) const {
-            DCHECK_LT(index, m_length);
+            DCHECK_LT(index, m_map.bucket_count());
+            DCHECK_EQ(std::distance(m_map.begin(index), m_map.end(index)), 1);
             return m_map.begin(index)->first;
         }
         size_t size_in_bytes() const {
-            return m_bucketfull.bit_size()/8 + sizeof(std::pair<key_type,value_type>) * m_map.max_size();
+            return m_bucketfull.bit_size()/8 + sizeof(std::pair<key_type,value_type>) * m_map.bucket_count();
         }
 
     };

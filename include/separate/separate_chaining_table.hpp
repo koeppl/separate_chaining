@@ -580,7 +580,6 @@ class separate_chaining_table {
         if(1ULL<<reserve_bits != reserve) ++reserve_bits;
         const size_t new_size = 1ULL<<reserve_bits;
 
-        m_overflow.resize_buckets(new_size);
         if(m_buckets == 0) {
             ON_DEBUG(m_plainkeys   = reinterpret_cast<key_type**>  (malloc(new_size*sizeof(key_type*)));)
             ON_DEBUG( std::fill(m_plainkeys, m_plainkeys+new_size, nullptr);)
@@ -591,6 +590,7 @@ class separate_chaining_table {
             m_bucketsizes  = reinterpret_cast<bucketsize_type*>  (malloc(new_size*sizeof(bucketsize_type)));
             std::fill(m_bucketsizes, m_bucketsizes+new_size, 0);
             m_buckets = reserve_bits;
+            m_overflow.resize_buckets(new_size);
         } else {
             separate_chaining_table tmp_map(m_width);
             tmp_map.reserve(new_size);
@@ -615,8 +615,12 @@ class separate_chaining_table {
                 }
                 clear(bucket);
             }
-            for(size_t i = 0; i < m_overflow.size(); ++i) {
-                tmp_map.find_or_insert(m_overflow.key(i), std::move(m_overflow[i]));
+            {
+                size_t i = m_overflow.first_position();
+                while(m_overflow.valid_position(i)) {
+                    tmp_map.find_or_insert(m_overflow.key(i), std::move(m_overflow[i]));
+                    i = m_overflow.next_position(i);
+                }
             }
 
             clear_structure();
