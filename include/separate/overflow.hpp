@@ -17,7 +17,7 @@ namespace separate_chaining {
         static key_type m_dummy_key;
 
         public:
-        dummy_overflow() { }
+        dummy_overflow(uint_fast8_t) {}
 
         static constexpr void resize_buckets(size_t) { }
         static constexpr bool need_consult(size_t) { return false; }
@@ -79,7 +79,7 @@ namespace separate_chaining {
 
         bool valid_position(const size_t position) const { return position < size(); } //! is position a valid entry of the table?
         
-        array_overflow() {
+        array_overflow(uint_fast8_t) {
             m_keys.initiate(m_length, 0);
             m_values.initiate(m_length, 0);
         }
@@ -180,7 +180,7 @@ namespace separate_chaining {
         size_t size() const { return m_map.size(); }
         size_t capacity() const { return m_map.bucket_count(); }
         
-        map_overflow() {
+        map_overflow(uint_fast8_t) {
           m_map.max_load_factor(1);
         }
 

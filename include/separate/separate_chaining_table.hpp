@@ -490,6 +490,7 @@ class separate_chaining_table {
     separate_chaining_table(size_t width = sizeof(key_type)*8) 
         : m_width(width)
         , m_hash(m_width) 
+        , m_overflow(width)
     {
         DDCHECK_GT(width, 1);
         DDCHECK_LE(width, 64);
@@ -791,7 +792,7 @@ class separate_chaining_table {
 
         if(bucket_size == max_bucket_size()) {
             if(m_overflow.size() < m_overflow.capacity()) {
-                const size_t overflow_position = m_overflow.insert(bucket, key, value);
+                const size_t overflow_position = m_overflow.insert(bucket, key, std::move(value));
                 if(overflow_position != static_cast<size_t>(-1ULL)) { // could successfully insert element into overflow table
                     ++m_elements;
                     DDCHECK_EQ(m_overflow.find(key), overflow_position);
