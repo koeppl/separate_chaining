@@ -353,7 +353,7 @@ class separate_chaining_table {
     uint_fast8_t m_width;
     hash_mapping_type m_hash; //! hash function
 
-    overflow_type m_overflow;
+    mutable overflow_type m_overflow; //TODO: cht_overflow has non-const operations
 
     //! shrinks a bucket to its real size
     void shrink_to_fit(size_t bucket) {
