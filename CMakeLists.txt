@@ -29,7 +29,8 @@ install(FILES separate_chaining_map.hpp DESTINATION include)
 # examples
 ##########
 
-#add_executable  (example_map example_map.cpp)
+add_executable  (example_map example_map.cpp)
+target_link_libraries(example_map gtest pthread ${GLOG_LIBRARY})
 
 
 ##########
