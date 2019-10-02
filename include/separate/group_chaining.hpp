@@ -45,8 +45,8 @@ class group_bucket {
       DCHECK_EQ(length, m_length);
       ON_DEBUG(m_length = length+1;)
       m_data = reinterpret_cast<storage_type*>  (realloc(m_data, sizeof(storage_type)*(length+1)));
-      for(size_t i = index; i < length; ++i) {
-        m_data[i+1] = m_data[i];
+      for(size_t i = length; i > index; --i) {
+        m_data[i] = m_data[i-1];
       }
         m_data[index] = key;
     }
@@ -104,6 +104,7 @@ class bucket_group {
     group_bucket<internal_t> m_keys; //! bucket for keys
     group_bucket<internal_t> m_values; //! bucket for values
     internal_type* m_border = nullptr; //! bit vector marking the borders, stores a 1 for each m_groupsize and a zero for each m_size
+    ON_DEBUG(std::vector<size_t> m_border_array;)
     using group_type = uint16_t;
     group_type m_groupsize = 0; // m_groupsize + m_size  = bit vector length of m_border
 
@@ -134,6 +135,7 @@ class bucket_group {
     void clear() {
         if(m_border != nullptr) { free(m_border); }
         m_border = nullptr;
+        ON_DEBUG(m_border_array.clear();)
         m_keys.clear();
         m_values.clear();
     }
@@ -153,7 +155,9 @@ class bucket_group {
        last_border = static_cast<internal_type>(-1ULL)>>(internal_bitwidth - ((groupsize+1) % internal_bitwidth));
 
       ON_DEBUG(m_border_length = ceil_div<size_t>(groupsize, internal_bitwidth);)
-      ON_DEBUG({
+      ON_DEBUG(
+              m_border_array.resize(groupsize, 0);
+              {
               size_t sum = 0;
               for(size_t i = 0; i < m_border_length;++i) {
                 sum += __builtin_popcountll(m_border[i]);
@@ -170,19 +174,27 @@ class bucket_group {
     //    ON_DEBUG(m_length = ceil_div<size_t>(length*width, internal_bitwidth);)
     // }
     //
-    size_t find_group_position(group_type groupindex) {
+    
+    /**
+     * Selects the `groupindex`-th one in the bit vector `m_border`.
+     * This corresponds to the ending of the group `groupindex`
+     * Subtracting `groupindex` from this return value gives the last entry position of the group `groupindex` in `m_keys` and `m_values`
+     */ 
+    size_t find_group_position(const group_type groupindex) const {
+      group_type remaining_groupindex = groupindex;
       size_t sum = 0;
       const uint64_t* border_chunks = reinterpret_cast<uint64_t*>(m_border);
       for(size_t border_index = 0; ; ++border_index) {
         DDCHECK_LT(border_index, ceil_div<size_t>(m_border_length*sizeof(internal_type),sizeof(uint64_t)));
         const size_t popcount = __builtin_popcountll(border_chunks[border_index]);
-        if(popcount <= groupindex) { groupindex -= popcount; sum += 64; continue; }
-        return sum + bits::select64(border_chunks[border_index], groupindex+1);
+        if(popcount <= remaining_groupindex) { remaining_groupindex -= popcount; sum += 64; continue; }
+        DDCHECK_EQ(sum + bits::select64(border_chunks[border_index], remaining_groupindex+1), m_border_array[groupindex]+groupindex);
+        return sum + bits::select64(border_chunks[border_index], remaining_groupindex+1);
       }
     }
 
     void push_back(const group_type groupindex, const storage_type key, const uint_fast8_t keywidth, const storage_type value, const uint_fast8_t valuewidth) {
-      const size_t group_ending = find_group_position(groupindex+1)-1;
+      const size_t group_ending = find_group_position(groupindex);
       m_keys.insert(group_ending-groupindex, key, keywidth, m_size);
       m_values.insert(group_ending-groupindex, value, valuewidth, m_size);
       ++m_size;
@@ -204,7 +216,7 @@ class bucket_group {
           m_border[i] = (m_border[i] << 1) | highest_bit;
           highest_bit = new_highest_bit;
       }
-      ON_DEBUG({
+      ON_DEBUG({ // check whether all group '1's are still set
               size_t sum = 0;
               for(size_t i = 0; i < m_border_length;++i) {
                 sum += __builtin_popcountll(m_border[i]);
@@ -212,13 +224,23 @@ class bucket_group {
               DCHECK_EQ(sum, m_groupsize+1);
               });
 
+      ON_DEBUG(// check whether the group sizes are correct
+              for(size_t i = groupindex; i < m_border_array.size(); ++i) {
+                ++m_border_array[i];
+              }
+              for(size_t i = 0; i < m_border_array.size(); ++i) {
+                DCHECK_EQ(m_border_array[i], find_group_position(i)-i);
+                }
+              )
+
+
     }
 
-    std::pair<storage_type,storage_type> read(const group_type groupindex, size_t position, size_t keywidth, size_t valuewidth) const {
+    std::pair<storage_type,storage_type> read(size_t groupindex, size_t position, size_t keywidth, size_t valuewidth) const {
       DCHECK_LT(groupindex, m_groupsize);
-      const size_t group_begin = find_group_position(groupindex);
+      const size_t group_begin = groupindex == 0 ? 0 : find_group_position(groupindex-1)+1;
       ON_DEBUG(
-          const size_t next_group_begin = find_group_position(groupindex+1);
+          const size_t next_group_begin = find_group_position(groupindex);
           DCHECK_LT(position, next_group_begin-group_begin);
           );
       return { m_keys.read(group_begin+position-groupindex, keywidth), m_values.read(group_begin+position-groupindex, valuewidth) };
