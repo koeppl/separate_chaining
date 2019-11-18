@@ -755,7 +755,7 @@ class separate_chaining_table {
      */
     std::pair<size_t, size_t> locate(const key_type& key) const {
         if(m_buckets == 0) throw std::runtime_error("cannot query empty hash table");
-        if(m_overflow.size() > 0) {
+        if(m_overflow.size() > 0) { //TODO: this should only be checked when the bucket is full!
             const size_t position = m_overflow.find(key);
             if(position != (-1ULL)) {
                 return { bucket_count(), position };

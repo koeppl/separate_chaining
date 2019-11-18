@@ -5,17 +5,25 @@ using namespace std;
 
 
 int main() {
-	separate_chaining::bucket_group group;
-	const size_t groups = 10;
+	// separate_chaining::keyvalue_group<> group;
+	// const size_t groups = 10;
+    //
+	// group.initiate(groups, 8, 8);
+	// for(size_t i = 0; i < 100; ++i) {
+	// 	group.push_back(i % groups, i, 8, i, 8);
+	// }
+	// for(size_t i = 0; i < 100; ++i) {
+	// 	DCHECK_EQ(group.read(i % groups, i/groups, 8, 8).first, i);
+	// 	DCHECK_EQ(group.read(i % groups, i/groups, 8, 8).second, i);
+	// 	DCHECK_EQ(group.find(i % groups, i, 8), i / groups);
+	// }
+	// cout << "Hello, World!";
 
-	group.initiate(groups, 8, 8);
+	separate_chaining::group_chaining_table<> table;
 	for(size_t i = 0; i < 100; ++i) {
-		group.push_back(i % groups, i, 8, i, 8);
+		table.find_or_insert(i,i);
 	}
-	for(size_t i = 0; i < 100; ++i) {
-		DCHECK_EQ(group.read(i % groups, i/groups, 8, 8).first, i);
-		DCHECK_EQ(group.read(i % groups, i/groups, 8, 8).second, i);
-	}
-	cout << "Hello, World!";
+
+
 	return 0;
 }
