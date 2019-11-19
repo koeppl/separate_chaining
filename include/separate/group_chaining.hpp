@@ -144,8 +144,8 @@ class keyvalue_group {
     //    return length*sizeof(internal_type);
     // }
     size_t size() const { return m_size; }
-    size_t groupsize() const { return m_groupsize;} //returns the number of buckets within this group
-    size_t bucketsize(size_t i) const {  // returns the number of elements in the i-th bucket
+    size_t groupsize() const { return m_groupsize;} //! returns the number of buckets within this group
+    size_t bucketsize(size_t i) const {  //! returns the number of elements in the i-th bucket
         if(empty()) { return 0; }
         const size_t prev_position = (i == 0) ? 0 : find_group_position(i-1) - (i-1);
         DCHECK_GE(find_group_position(i), i + prev_position);
@@ -348,7 +348,7 @@ struct group_chaining_navigator {
             if(m_map.m_overflow.size() > 0 && m_bucket == m_map.bucket_count() && m_map.m_overflow.valid_position(m_position)) 
                 { return false; }
 
-            return m_bucket >= m_map.bucket_count() || m_position >= m_map.bucket_size(m_bucket);
+            return m_bucket >= m_map.bucket_count() || m_position >= m_map.m_groups[m_map.bucketgroup(m_bucket)].bucketsize(m_map.rank_in_group(m_bucket));
         }
 
     public:
@@ -541,12 +541,18 @@ class group_chaining_table {
     uint_fast8_t m_value_width;
     hash_mapping_type m_hash; //! hash function
     mutable overflow_type m_overflow; //TODO: cht_overflow has non-const operations
+
+    ON_DEBUG(key_type** m_plainkeys = nullptr;) //!bucket for keys in plain format for debugging purposes
+    ON_DEBUG(value_type** m_plainvalues = nullptr;) //!bucket for values in plain format for debugging purposes
+    ON_DEBUG(bucketsize_type* m_bucketsizes = nullptr); //! size of each bucket for debugging purposes
     // END member variables
 
 
     void swap(group_chaining_table& other) {
         // DDCHECK_EQ(m_width, other.m_width);
         ON_DEBUG(std::swap(m_plainkeys, other.m_plainkeys);)
+        ON_DEBUG(std::swap(m_plainvalues, other.m_plainvalues);)
+        ON_DEBUG(std::swap(m_bucketsizes, other.m_bucketsizes);)
 
         std::swap(m_key_width, other.m_key_width);
         std::swap(m_value_width, other.m_value_width);
@@ -559,8 +565,6 @@ class group_chaining_table {
 
 
 
-    ON_DEBUG(key_type** m_plainkeys = nullptr;) //!bucket for keys in plain format for debugging purposes
-    ON_DEBUG(value_type** m_plainvalues = nullptr;) //!bucket for values in plain format for debugging purposes
 
     //!@see std::vector
     size_t capacity() const {
@@ -573,9 +577,24 @@ class group_chaining_table {
     }
 
 
+    private:
     void clear(const size_t group) { //! empties i-th group
+        DCHECK(false);
         m_groups[group].clear();
+#ifndef NDEBUG
+        const size_t bucket_offset = group * max_groupsize();
+        for(size_t bucket = 0; bucket < max_groupsize(); ++bucket) {
+            if(m_bucketsizes[bucket_offset + bucket] > 0) {
+                ON_DEBUG(free(m_plainkeys[bucket_offset + bucket]));
+                ON_DEBUG(free(m_plainvalues[bucket_offset + bucket]));
+            } else {
+                DCHECK(m_plainkeys == nullptr);
+                DCHECK(m_plainvalues == nullptr);
+            }
+        }
+#endif
     }
+    public:
     
     /**
      * Do NOT call this function unless you know what you are doing!
@@ -584,6 +603,9 @@ class group_chaining_table {
      */
     void clear_structure() { 
         delete [] m_groups;
+        ON_DEBUG(free(m_bucketsizes));
+        ON_DEBUG(free(m_plainkeys));
+        ON_DEBUG(free(m_plainvalues));
         m_buckets = 0;
         m_elements = 0;
     }
@@ -616,11 +638,11 @@ class group_chaining_table {
     storage_type quotient_at(const size_t bucket, const size_t position, uint_fast8_t key_bitwidth) const {
         return m_groups[bucketgroup(bucket)].read_key(rank_in_group(bucket), position, key_bitwidth);
     }
-    const value_type& value_at(const size_t bucket, const size_t position, uint_fast8_t value_bitwidth) const {
-        return m_groups[bucketgroup(bucket)].read_value(rank_in_group(bucket), position, value_bitwidth);
-    }
-    value_type& value_at(const size_t bucket, const size_t position, uint_fast8_t value_bitwidth) {
-        return m_groups[bucketgroup(bucket)].read_value(rank_in_group(bucket), position, value_bitwidth);
+    // const value_type value_at(const size_t bucket, const size_t position, uint_fast8_t value_bitwidth) const {
+    //     return m_groups[bucketgroup(bucket)].read_value(rank_in_group(bucket), position, value_bitwidth);
+    // }
+    value_type value_at(const size_t bucket, const size_t position) const {
+        return m_groups[bucketgroup(bucket)].read_value(rank_in_group(bucket), position, value_width());
     }
 
     //! returns the maximum value of a key that can be stored
@@ -646,7 +668,7 @@ class group_chaining_table {
     }
 
     static constexpr size_t max_bucket_size() { //! largest number of elements a bucket can contain before enlarging the hash table
-    #ifdef SEPARATE_MAX_BUCKET_SIZE
+#ifdef SEPARATE_MAX_BUCKET_SIZE
         return std::min<size_t>(SEPARATE_MAX_BUCKET_SIZE, std::numeric_limits<bucketsize_type>::max());
 #else
         return std::numeric_limits<bucketsize_type>::max(); //, (separate_chaining::MAX_BUCKET_BYTESIZE*8)/m_width);
@@ -732,10 +754,14 @@ class group_chaining_table {
         const size_t new_size = 1ULL<<reserve_bits;
 
         if(m_buckets == 0) {
-            ON_DEBUG(m_plainkeys   = reinterpret_cast<key_type**>  (malloc(new_size*sizeof(key_type*)));)
-            ON_DEBUG(m_plainvalues   = reinterpret_cast<value_type**>  (malloc(new_size*sizeof(value_type*)));)
-            ON_DEBUG( std::fill(m_plainkeys, m_plainkeys+new_size, nullptr);)
-            ON_DEBUG( std::fill(m_plainvalues, m_plainvalues+new_size, nullptr);)
+#ifndef NDEBUG
+            m_plainkeys   = reinterpret_cast<key_type**>  (malloc(new_size*sizeof(key_type*)));
+            m_plainvalues   = reinterpret_cast<value_type**>  (malloc(new_size*sizeof(value_type*)));
+            std::fill(m_plainkeys, m_plainkeys+new_size, nullptr);
+            std::fill(m_plainvalues, m_plainvalues+new_size, nullptr);
+            m_bucketsizes  = reinterpret_cast<bucketsize_type*>  (malloc(new_size*sizeof(bucketsize_type)));
+            std::fill(m_bucketsizes, m_bucketsizes+new_size, 0);
+#endif//NDEBUG
 
             m_groups = new keyvalue_group_type[bucketgroup(new_size)+1];
             m_buckets = reserve_bits;
@@ -971,22 +997,32 @@ class group_chaining_table {
         if(!group.initialized()) { group.initialize(max_groupsize(), quotient_width, value_width());}
 
 #ifndef NDEBUG
-        if(bucket_size == 0) {
-            ON_DEBUG(bucket_plainkeys   = reinterpret_cast<key_type*>  (malloc(sizeof(key_type))));
+        value_type*& bucket_plainvalues = m_plainvalues[bucket];
+        DCHECK_EQ(m_bucketsizes[bucket], bucket_size);
+        if(m_bucketsizes[bucket] == 0) {
+            DCHECK(bucket_plainkeys == nullptr);
+            DCHECK(bucket_plainvalues == nullptr);
+            bucket_plainkeys   = reinterpret_cast<key_type*>  (malloc(sizeof(key_type)));
+            bucket_plainvalues = reinterpret_cast<key_type*>  (malloc(sizeof(value_type)));
         } else {
-            ON_DEBUG(bucket_plainkeys   = reinterpret_cast<key_type*>  (realloc(bucket_plainkeys, sizeof(key_type)*bucket_size));)
+            bucket_plainkeys   = reinterpret_cast<key_type*>  (realloc(bucket_plainkeys, sizeof(key_type)*(bucket_size+1)));
+            bucket_plainvalues   = reinterpret_cast<key_type*>  (realloc(bucket_plainvalues, sizeof(value_type)*(bucket_size+1)));
         }
+        ++m_bucketsizes[bucket];
 #endif//NDEBUG
         DDCHECK_LE(key, max_key());
         ON_DEBUG(bucket_plainkeys[bucket_size] = key;)
+        ON_DEBUG(bucket_plainvalues[bucket_size] = value;)
         
         DDCHECK_LT((static_cast<size_t>(bucket_size)*quotient_width)/64 + ((bucket_size)* quotient_width) % 64, 64*ceil_div<size_t>((bucket_size+1)*quotient_width, 64) );
 
         DDCHECK_LE(quotient_width, sizeof(key_type)*8);
 
         group.push_back(rank_in_group(bucket), quotient, quotient_width, value, value_width());
+        DCHECK_EQ(m_bucketsizes[bucket], group.bucketsize(rank_in_group(bucket)));
 
         DDCHECK_EQ(m_hash.inv_map(group.read_key(rank_in_group(bucket), bucket_size, quotient_width), bucket, m_buckets), key);
+        DDCHECK_EQ(bucket_plainvalues[bucket_size], group.read_value(rank_in_group(bucket), bucket_size, value_width()));
 
         return { *this, bucket, static_cast<size_t>(bucket_size) };
     }

@@ -22,6 +22,9 @@ int main() {
 	separate_chaining::group_chaining_table<> table;
 	for(size_t i = 0; i < 100; ++i) {
 		table.find_or_insert(i,i);
+		for(size_t j = 0; j < i; ++j) {
+		    DCHECK_EQ(table[j], j);
+		}
 	}
 
 
