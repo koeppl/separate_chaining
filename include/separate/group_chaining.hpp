@@ -8,6 +8,9 @@
 namespace separate_chaining {
 
 
+namespace group {
+
+
 /**
  * the internal representation of a key or value array in a `keyvalue_group`
  * It is unaware of its size, since a `keyvalue_group` can store for keys and values a separate `core_group` with the respective key and value bit widths.
@@ -56,14 +59,18 @@ class core_group {
       }
         m_data[index] = key;
     }
-    storage_type read(size_t i, [[maybe_unused]]  size_t width) const {
+    storage_type read(size_t i, [[maybe_unused]]  uint_fast8_t width) const {
         DDCHECK_LT(i, m_length);
         return m_data[i];
+    }
+    void write(size_t i, size_t value, [[maybe_unused]]  uint_fast8_t width) const {
+        DDCHECK_LT(i, m_length);
+        m_data[i] = value;
     }
     /*
      * search in the interval [`position_from`, `position_to`) for `key`
      */
-    size_t find(const size_t position_from, const storage_type& key, const size_t position_to, [[maybe_unused]] const size_t width = 0) const {
+    size_t find(const size_t position_from, const storage_type& key, const size_t position_to, [[maybe_unused]] const uint_fast8_t width = 0) const {
       DDCHECK_LE(position_to, m_length);
       for(size_t i = position_from; i < position_to; ++i) {
         if(m_data[i] == key) return i;
@@ -179,7 +186,7 @@ class keyvalue_group {
        last_border = static_cast<internal_type>(-1ULL)>>(internal_bitwidth - ((groupsize+1) % internal_bitwidth));
 
       ON_DEBUG(m_border_length = ceil_div<size_t>(groupsize+1, internal_bitwidth);)
-      // ON_DEBUG(
+      // ON_DEBUG( // TODO: make debug only
               m_border_array.resize(groupsize, 0);
               {
               size_t sum = 0;
@@ -234,46 +241,56 @@ class keyvalue_group {
       internal_type& current_chunk = m_border[group_ending/internal_bitwidth];
 
       bool highest_bit = current_chunk & 1ULL<<(internal_bitwidth-1);
+      if( (group_ending+1) % internal_bitwidth == 0) {
+          current_chunk = current_chunk & ((-1ULL)>>(65-internal_bitwidth)); // remove the most significant bit
+      } else {
       current_chunk = ((current_chunk) &  ((1ULL<< (group_ending % internal_bitwidth))-1) )
           | ((current_chunk<<1) &  ((-1ULL<< ((group_ending % internal_bitwidth)+1))) );
+      }
 
       for(size_t i = group_ending/internal_bitwidth+1; i < new_border_size; ++i) {
           bool new_highest_bit = m_border[i] & 1ULL<<(internal_bitwidth-1);
           m_border[i] = (m_border[i] << 1) | highest_bit;
           highest_bit = new_highest_bit;
       }
-      ON_DEBUG({ // check whether all group '1's are still set
-              size_t sum = 0;
-              for(size_t i = 0; i < m_border_length;++i) {
-                sum += __builtin_popcountll(m_border[i]);
-              }
-              DCHECK_EQ(sum, m_groupsize+1);
-              });
 
-      ON_DEBUG(// check whether the group sizes are correct
-              for(size_t i = groupindex; i < m_border_array.size(); ++i) {
-                ++m_border_array[i];
-              }
-              for(size_t i = 0; i < m_border_array.size(); ++i) {
-                DCHECK_EQ(m_border_array[i], find_group_position(i)-i);
-                }
-              )
+      // ON_DEBUG(// check whether the group sizes are correct
+      for(size_t i = groupindex; i < m_border_array.size(); ++i) {
+          ++m_border_array[i];
+      }
+      for(size_t i = 0; i < m_border_array.size(); ++i) {
+          DCHECK_EQ(m_border_array[i], find_group_position(i)-i);
+      }
+      { // check whether all group '1's are still set
+          size_t sum = 0;
+          for(size_t i = 0; i < m_border_length;++i) {
+              sum += __builtin_popcountll(m_border[i]);
+          }
+          DCHECK_EQ(sum, m_groupsize+1);
+      }
+      //);//ON_DEBUG
+
 
 
     }
 
-    storage_type read_key(size_t groupindex, size_t position, size_t keywidth) const {
+    storage_type read_key(size_t groupindex, size_t position, uint_fast8_t keywidth) const {
       DCHECK_LT(groupindex, m_groupsize);
       const size_t group_begin = groupindex == 0 ? 0 : find_group_position(groupindex-1)+1;
       return  m_keys.read(group_begin+position-groupindex, keywidth);
     }
-    storage_type read_value(size_t groupindex, size_t position, size_t keywidth) const {
+    storage_type read_value(size_t groupindex, size_t position, uint_fast8_t valuewidth) const {
       DCHECK_LT(groupindex, m_groupsize);
       const size_t group_begin = groupindex == 0 ? 0 : find_group_position(groupindex-1)+1;
-      return  m_values.read(group_begin+position-groupindex, keywidth);
+      return  m_values.read(group_begin+position-groupindex, valuewidth);
+    }
+    void write_value(size_t groupindex, size_t position, size_t value, uint_fast8_t valuewidth) const {
+      DCHECK_LT(groupindex, m_groupsize);
+      const size_t group_begin = groupindex == 0 ? 0 : find_group_position(groupindex-1)+1;
+      m_values.write(group_begin+position-groupindex, value, valuewidth);
     }
 
-    std::pair<storage_type,storage_type> read(size_t groupindex, size_t position, size_t keywidth, size_t valuewidth) const {
+    std::pair<storage_type,storage_type> read(size_t groupindex, size_t position, size_t keywidth, uint_fast8_t valuewidth) const {
       DCHECK_LT(groupindex, m_groupsize);
       const size_t group_begin = groupindex == 0 ? 0 : find_group_position(groupindex-1)+1;
       ON_DEBUG(
@@ -322,6 +339,7 @@ class keyvalue_group {
 };
 
 // invariant: a keyvalue_group stores `key_width` many groups
+
 
 
 /**
@@ -381,6 +399,16 @@ struct group_chaining_navigator {
             const key_type read_key = m_map.m_hash.inv_map(read_quotient, m_bucket, m_map.m_buckets);
             return read_key;
         }
+
+        operator value_type() const { // cast to value
+            return value();
+        }
+        class_type operator=(value_type val) {
+            m_map.write_value(m_bucket, m_position, val);
+            return *this;
+        }
+
+
         //typename std::add_const<value_type>::type& value() const {
         value_type value() const {
             DDCHECK(!invalid());
@@ -643,6 +671,9 @@ class group_chaining_table {
     // }
     value_type value_at(const size_t bucket, const size_t position) const {
         return m_groups[bucketgroup(bucket)].read_value(rank_in_group(bucket), position, value_width());
+    }
+    void write_value(const size_t bucket, const size_t position, const size_t value) const {
+        return m_groups[bucketgroup(bucket)].write_value(rank_in_group(bucket), position, value, value_width());
     }
 
     //! returns the maximum value of a key that can be stored
@@ -932,7 +963,7 @@ class group_chaining_table {
      */
     std::pair<size_t, size_t> locate(const key_type& key) const {
         if(m_buckets == 0) throw std::runtime_error("cannot query empty hash table");
-        if(m_overflow.size() > 0) {
+        if(m_overflow.size() > 0) { //TODO: query only if we have a full bucket!
             const size_t position = m_overflow.find(key);
             if(position != (-1ULL)) {
                 return { bucket_count(), position };
@@ -1027,9 +1058,11 @@ class group_chaining_table {
         return { *this, bucket, static_cast<size_t>(bucket_size) };
     }
 
+    constexpr void shrink_to_fit() { }
 
-    value_type operator[](const key_type& key) {
-        return find_or_insert(key, value_type()).value();
+
+    navigator operator[](const key_type& key) {
+        return find_or_insert(key, value_type());
     }
 
     ~group_chaining_table() { clear(); }
@@ -1042,8 +1075,8 @@ class group_chaining_table {
 
 
 
+}//ns group
 
-
-}//ns
+}//ns separate_chaining
 
 

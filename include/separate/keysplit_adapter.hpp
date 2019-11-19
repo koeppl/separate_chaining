@@ -32,7 +32,7 @@ class keysplit_adapter {
     //! returns the maximum value of a key that can be stored
    constexpr key_type max_key() const { return std::min<key_type>( (-1ULL)>>(64-max_bits), std::numeric_limits<key_type>::max()); }
 
-   constexpr uint_fast8_t key_bit_width() const { return max_bits; }
+   constexpr uint_fast8_t key_width() const { return max_bits; }
 
    void shrink_to_fit() {
       for(std::size_t i = 0; i < m_length; ++i) {
@@ -81,29 +81,29 @@ class keysplit_adapter {
     }
 
     size_type erase(const key_type& key) {
-       const uint_fast8_t key_bit_width = bit_width(key);
-       const uint_fast8_t slot = key_bit_width == 0 ? 0 : (key_bit_width-1)/m_interval;
+       const uint_fast8_t key_width = bit_width(key);
+       const uint_fast8_t slot = key_width == 0 ? 0 : (key_width-1)/m_interval;
        DCHECK_LT(slot, m_length);
        return m_maps[slot]->erase(key);
     }
 
     const_iterator find(const key_type& key) const {
-       const uint_fast8_t key_bit_width = bit_width(key);
-       const uint_fast8_t slot = key_bit_width == 0 ? 0 : (key_bit_width-1)/m_interval;
+       const uint_fast8_t key_width = bit_width(key);
+       const uint_fast8_t slot = key_width == 0 ? 0 : (key_width-1)/m_interval;
        DCHECK_LT(slot, m_length);
        return m_maps[slot]->find(key);
     }
 
     value_type& operator[](const key_type& key) {
-       const uint_fast8_t key_bit_width = bit_width(key);
-       const uint_fast8_t slot = key_bit_width == 0 ? 0 : (key_bit_width-1)/m_interval;
+       const uint_fast8_t key_width = bit_width(key);
+       const uint_fast8_t slot = key_width == 0 ? 0 : (key_width-1)/m_interval;
        DCHECK_LT(slot, m_length);
        return (*m_maps[slot])[key];
     }
 
     size_type count(const key_type& key ) const {
-       const uint_fast8_t key_bit_width = bit_width(key);
-       const uint_fast8_t slot = key_bit_width == 0 ? 0 : (key_bit_width-1)/m_interval;
+       const uint_fast8_t key_width = bit_width(key);
+       const uint_fast8_t slot = key_width == 0 ? 0 : (key_width-1)/m_interval;
        DCHECK_LT(slot, m_length);
        return m_maps[slot]->count(key);
     }
@@ -156,7 +156,7 @@ class keysplit_adapter64 {
 
     //! returns the maximum value of a key that can be stored
    constexpr key_type max_key() const { return std::numeric_limits<key_type>::max(); }
-   constexpr uint_fast8_t key_bit_width() const { return max_bits; }
+   constexpr uint_fast8_t key_width() const { return max_bits; }
 
    void clear() {
       m_adapter.clear();

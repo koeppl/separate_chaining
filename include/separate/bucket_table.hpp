@@ -74,7 +74,7 @@ template<class hash_map>
         }
         const key_type key() const {
             DCHECK_LT(m_position, m_map.size());
-            return m_map.m_keys.read(m_position, m_map.key_bit_width());
+            return m_map.m_keys.read(m_position, m_map.key_width());
         }
         const value_type& value() const {
             DCHECK_LT(m_position, m_map.size());
@@ -211,7 +211,7 @@ class bucket_table {
     key_type max_key() const { return (-1ULL) >> (64-m_width); }
 
     //! returns the bit width of the keys
-    uint_fast8_t key_bit_width() const { return m_width; }
+    uint_fast8_t key_width() const { return m_width; }
 
     //! @see std::unordered_map
     bool empty() const { return m_elements == 0; } 
@@ -343,7 +343,7 @@ class bucket_table {
         if(!m_keys.initialized()) {
             m_elements = 1;
             ON_DEBUG(m_plainkeys   = reinterpret_cast<key_type*>  (malloc(sizeof(key_type))));
-            m_keys.initiate(resize_strategy_type::INITIAL_BUCKET_SIZE, key_bit_width());
+            m_keys.initiate(resize_strategy_type::INITIAL_BUCKET_SIZE, key_width());
             m_values.initiate(resize_strategy_type::INITIAL_BUCKET_SIZE, sizeof(value_type)*8);
             m_resize_strategy.assign(resize_strategy_type::INITIAL_BUCKET_SIZE);
         } else { 
