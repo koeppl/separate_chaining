@@ -338,7 +338,7 @@ TEST(map, quotienting) {
    TEST(x, random_large) { y; test_map_random_large(map); } 
 
 
-// TEST_SMALL_MAP(map_group, group::group_chaining_table<> map(32,32))
+TEST_SMALL_MAP(map_group, group::group_chaining_table<> map(32,32))
 //
 TEST_MAP(compact_map_32_8, compact_chaining_map<hash_mapping_adapter<uint32_t COMMA SplitMix> COMMA uint8_t  > map(32,64))
 TEST_MAP(compact_map_8_8, compact_chaining_map<hash_mapping_adapter<uint8_t COMMA SplitMix>  COMMA uint8_t > map(8,64))
