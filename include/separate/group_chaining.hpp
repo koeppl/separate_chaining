@@ -690,21 +690,29 @@ class group_chaining_table {
 
 
     private:
+#ifndef NDEBUG
+    void clear_bucket(const size_t bucket) { //! empties i-th bucket, only for debug purposes
+        if(m_plainkeys[bucket] != nullptr) {
+            free(m_plainkeys[bucket]);
+            m_plainkeys[bucket] = nullptr;
+        }
+        if(m_plainvalues[bucket] != nullptr) {
+            free(m_plainvalues[bucket]);
+            m_plainvalues[bucket] = nullptr;
+        }
+        m_bucketsizes[bucket] = 0;
+    }
+#endif//NDEBUG
+
     void clear(const size_t group) { //! empties i-th group
-        DCHECK(false);
         m_groups[group].clear();
 #ifndef NDEBUG
         const size_t bucket_offset = group * max_groupsize();
-        for(size_t bucket = 0; bucket < max_groupsize(); ++bucket) {
-            if(m_bucketsizes[bucket_offset + bucket] > 0) {
-                ON_DEBUG(free(m_plainkeys[bucket_offset + bucket]));
-                ON_DEBUG(free(m_plainvalues[bucket_offset + bucket]));
-            } else {
-                DCHECK(m_plainkeys == nullptr);
-                DCHECK(m_plainvalues == nullptr);
-            }
+        for(size_t i = 0; i < max_groupsize(); ++i) {
+            const size_t bucket = bucket_offset + bucket;
+            clear_bucket(bucket);
         }
-#endif
+#endif//NDEBUG
     }
     public:
     
@@ -1224,6 +1232,11 @@ class group_chaining_table {
         if(group.empty()) { //clear the group if it becomes empty
             clear(bucketgroup(bucket));
         }
+#ifndef NDEBUG
+        if(m_bucketsizes[bucket] == 0) {
+            clear_bucket(bucket);
+        }
+#endif
         return 1;
     }
 
