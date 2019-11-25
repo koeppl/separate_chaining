@@ -390,7 +390,7 @@ class varwidth_bucket {
 
     varwidth_bucket() = default;
 
-    void initiate(const size_t length, const uint_fast8_t width) {
+    void initiate(const size_t length, const uint_fast8_t width) { // TODO: rename to initialize
        DDCHECK(m_data == nullptr);
         m_data = reinterpret_cast<internal_type*>  (malloc(sizeof(internal_type)* ceil_div<size_t>(length*width, storage_bitwidth) ));
         ON_DEBUG(m_length = ceil_div<size_t>(length*width, storage_bitwidth);)

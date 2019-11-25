@@ -21,11 +21,13 @@ T random_int(const T& maxvalue) {
 
 TEST(map_group, out) { 
    using T = group::group_chaining_table<>;
-   T map(32,32);
+   constexpr size_t key_width = 32;
+   constexpr size_t value_width = 32;
+   T map(key_width, value_width);
    using key_type = typename T::key_type;
    using value_type = typename T::value_type;
    const uint64_t max_key = map.max_key();
-   constexpr uint64_t max_value = std::numeric_limits<value_type>::max();
+   const uint64_t max_value = map.max_value();
    for(size_t reps = 0; reps < 100; ++reps) {
       map.clear();
       std::map<typename T::key_type, typename T::value_type> rev;
@@ -168,7 +170,7 @@ void test_map_random_serialize(T& map) {
    using key_type = typename T::key_type;
    using value_type = typename T::value_type;
    const uint64_t max_key = map.max_key();
-   constexpr uint64_t max_value = std::numeric_limits<value_type>::max();
+   const uint64_t max_value = map.max_value();
    for(size_t reps = 0; reps < 100; ++reps) {
       map.clear();
       for(size_t i = 0; i < 100; ++i) {
@@ -208,7 +210,7 @@ void test_map_random(T& map) {
    using key_type = typename T::key_type;
    using value_type = typename T::value_type;
    const uint64_t max_key = map.max_key();
-   constexpr uint64_t max_value = std::numeric_limits<value_type>::max();
+   const uint64_t max_value = map.max_value();
    for(size_t reps = 0; reps < 100; ++reps) {
 
       map.clear();
@@ -249,7 +251,7 @@ void test_map_random_large(T& map) {
    using key_type = typename T::key_type;
    using value_type = typename T::value_type;
    const uint64_t max_key = map.max_key();
-   constexpr uint64_t max_value = std::numeric_limits<value_type>::max();
+   const uint64_t max_value = map.max_value();
 
    std::map<typename T::key_type, typename T::value_type> rev;
    for(size_t i = 0; i < 1000000; ++i) {

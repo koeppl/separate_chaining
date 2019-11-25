@@ -18,10 +18,15 @@ namespace group {
 template<class internal_t>
 class core_group {
     using storage_type = size_t; //TODO: separate storage_type and key_type
-    ON_DEBUG(size_t m_length;)
+    using internal_type = internal_t;
+    static constexpr uint_fast8_t storage_bitwidth = sizeof(internal_type)*8;
 
-    protected:
-    storage_type* m_data = nullptr; //!bucket for keys
+    private:
+    ON_DEBUG(size_t m_key_width;)
+    ON_DEBUG(size_t m_length;)
+    ON_DEBUG(storage_type* m_plain_data = nullptr;) //!bucket for keys, debug purpose only
+    internal_type* m_data = nullptr; //!bucket for keys
+
 
     public:
     bool initialized() const { return m_data != nullptr; } //!check whether we can add elements to the bucket
@@ -31,64 +36,208 @@ class core_group {
             free(m_data);
         }
         m_data = nullptr;
+        ON_DEBUG(
+        if(m_plain_data != nullptr) {
+            free(m_plain_data);
+        }
+        m_plain_data = nullptr;
+        )
         ON_DEBUG(m_length = 0;)
     }
 
-    storage_type& operator[](const size_t index) {
-        DDCHECK_LT(index, m_length);
-        return m_data[index];
-    }
-    const storage_type& operator[](const size_t index) const {
-        DDCHECK_LT(index, m_length);
-        return m_data[index];
-    }
-
-    void initialize([[maybe_unused]] const uint_fast8_t width) {
-       DDCHECK(m_data == nullptr);
-       m_data = reinterpret_cast<storage_type*>(malloc(sizeof(storage_type)));
+    // storage_type& operator[](const size_t index) {
+    //     DDCHECK_LT(index, m_length);
+    //     return m_plain_data[index];
+    // }
+    // const storage_type& operator[](const size_t index) const {
+    //     DDCHECK_LT(index, m_length);
+    //     return m_plain_data[index];
+    // }
+    //
+    void initialize(const uint_fast8_t width) {
+       DDCHECK(m_plain_data == nullptr);
+       m_plain_data = reinterpret_cast<storage_type*>(malloc(sizeof(storage_type)));
+       m_plain_data[0] = 0;
+       ON_DEBUG(m_key_width = width;)
        ON_DEBUG(m_length = 0;)
+
+       DDCHECK(m_data == nullptr);
+       m_data = reinterpret_cast<internal_type*>  (malloc(sizeof(internal_type)* ceil_div<size_t>(width, storage_bitwidth) ));
+       memset(m_data, 0, sizeof(internal_type)* ceil_div<size_t>(width, storage_bitwidth));
+       // ON_DEBUG(m_length = ceil_div<size_t>(width, storage_bitwidth);)
     }
 
-    void erase(const size_t index, [[maybe_unused]] const uint_fast8_t keywidth, size_t length) { //! length = old length
-      DDCHECK(m_data != nullptr);
+    void erase(const size_t index, const uint_fast8_t key_width, size_t length) { //! length = old length
+      DDCHECK_EQ(m_key_width, key_width);
+      DDCHECK(m_plain_data != nullptr);
       DDCHECK_EQ(length, m_length);
-      ON_DEBUG(m_length = length-1;)
+
+
+       for(size_t i = index; i+1 < length; ++i) { //TODO: this can be speed up with word-packing!
+           const size_t oldkey = read_(i+1, key_width);
+           write_(i, oldkey, key_width);
+       }
+
+#ifndef NDEBUG
       for(size_t i = index; i+1 < length; ++i) {
-          m_data[i] = m_data[i+1];
+          m_plain_data[i] = m_plain_data[i+1];
       }
+#endif //NDEBUG
+
       if(length-1 > 0) {
-          m_data = reinterpret_cast<storage_type*>  (realloc(m_data, sizeof(storage_type)*(length-1)));
+          ON_DEBUG(m_plain_data = reinterpret_cast<storage_type*>  (realloc(m_plain_data, sizeof(storage_type)*(length-1))));
+          const size_t oldblocksize = ceil_div<size_t>(key_width*length, storage_bitwidth);
+          const size_t newblocksize = ceil_div<size_t>(key_width*(length-1), storage_bitwidth);
+          if(oldblocksize < newblocksize) {
+              m_data = reinterpret_cast<internal_type*>  (realloc(m_data, sizeof(internal_type)* newblocksize));
+          }
       }
+
+      ON_DEBUG(m_length = length-1;)
+
+#ifndef NDEBUG
+       for(size_t i = 0; i < m_length; ++i) {
+           DCHECK_EQ(m_plain_data[i], read(i, key_width));
+       }
+#endif //NDEBUG
     }
 
 
-    void insert(const size_t index, const storage_type& key, [[maybe_unused]] const uint_fast8_t keywidth, size_t length) { //! length = old length
-      DDCHECK(m_data != nullptr);
+    void insert(const size_t index, const storage_type& key, const uint_fast8_t keywidth, size_t length) { //! length = old length
+      DCHECK_EQ(m_key_width, keywidth);
+      DDCHECK(m_plain_data != nullptr);
       DDCHECK_EQ(length, m_length);
-      ON_DEBUG(m_length = length+1;)
-      m_data = reinterpret_cast<storage_type*>  (realloc(m_data, sizeof(storage_type)*(length+1)));
+#ifndef NDEBUG
+      m_length = length+1;
+      m_plain_data = reinterpret_cast<storage_type*>  (realloc(m_plain_data, sizeof(storage_type)*(length+1)));
       for(size_t i = length; i > index; --i) {
-        m_data[i] = m_data[i-1];
+        m_plain_data[i] = m_plain_data[i-1];
       }
-        m_data[index] = key;
+      m_plain_data[index] = key;
+#endif //NDEBUG
+       const size_t oldblocksize = ceil_div<size_t>(keywidth*length, storage_bitwidth);
+       const size_t newblocksize = ceil_div<size_t>(keywidth*(length+1), storage_bitwidth);
+       if(oldblocksize < newblocksize) {
+           m_data = reinterpret_cast<internal_type*>  (realloc(m_data, sizeof(internal_type)* newblocksize));
+           m_data[newblocksize-1] = 0;
+       }
+       size_t newkey = key;
+       for(size_t i = index; i < m_length; ++i) { //TODO: this can be speed up with word-packing
+           const size_t oldkey = read_(i, keywidth);
+           write_(i, newkey, keywidth);
+           newkey = oldkey;
+       }
+       // const uint8_t offset = (index * keywidth) % storage_bitwidth;
+       // uint64_t* it = reinterpret_cast<uint64_t*>(m_data +  (index* keywidth)/storage_bitwidth);
+       // DCHECK_LT(offset+keywidth, 64);
+       //
+       // uint64_t& current_block = *it;
+       // const uint_fast8_t current_offset = std::min(offset+keywidth, 64);
+       // uint64_t overflow = current_block >> (64-keywidth);
+       // current_block = (current_block & (-1ULL>>(64-current_offset-keywidth))) |
+       //      ((current_block << keywidth) & (-1ULL<<(current_offset)));
+       //      current_block |= key << offset;
+       //  if(current_offset == 64) {
+       //      const uint_fast8_t remaining_key_length = offset+keywidth-64; // how many bits of the key we have to copy
+       //      const uint64_t new_overflow = it[block] >> (64-keywidth);
+       //
+       //      const uint64_t upper_bits = it[1] >> (64-remaining_bits_length);
+       //      it[1] 
+       //      const size_t upper_bits = it[1] & (-1ULL)>>(upper_bits_length);
+       //      overflow |= upper_bits << upper_bits_length;
+       //  }
+       //
+       // for(size_t block = 2; block < ceil_div<size_t>(length-index, 64); ++block) { //! for each 64-bit block
+       //     const uint64_t new_overflow = it[block] >> (64-keywidth);
+       //     it[block] <<= keywidth;
+       //     it[block] |= overflow;
+       //     overflow = new_overflow;
+       // }
+#ifndef NDEBUG
+       for(size_t i = 0; i < length; ++i) {
+           DCHECK_EQ(m_plain_data[i], read(i, keywidth));
+       }
+#endif //NDEBUG
+
     }
-    storage_type read(size_t i, [[maybe_unused]]  uint_fast8_t width) const {
+
+    private:
+    storage_type read_(size_t i, uint_fast8_t key_width) const { // direct access without debug check
+      DCHECK_EQ(m_key_width, key_width);
         DDCHECK_LT(i, m_length);
-        return m_data[i];
+        DDCHECK_LT((static_cast<size_t>(i)*key_width)/storage_bitwidth + ((i)* key_width) % storage_bitwidth, storage_bitwidth*ceil_div<size_t>(m_length*key_width, storage_bitwidth) );
+        return tdc::tdc_sdsl::bits_impl<>::read_int(reinterpret_cast<uint64_t*>(m_data + (static_cast<size_t>(i)*key_width)/storage_bitwidth), ((i)* key_width) % storage_bitwidth, key_width);
     }
-    void write(size_t i, size_t value, [[maybe_unused]]  uint_fast8_t width) const {
-        DDCHECK_LT(i, m_length);
-        m_data[i] = value;
+
+    public:
+    storage_type read(size_t i, uint_fast8_t key_width) const {
+        DCHECK_EQ(m_key_width, key_width);
+        const size_t ret = read_(i, key_width);
+        DCHECK_EQ(m_plain_data[i], ret);
+        return ret;
+
     }
+
+    private:
+    void write_(size_t index, size_t key, uint_fast8_t key_width) const {
+        DCHECK_EQ(m_key_width, key_width);
+        DDCHECK_LE(most_significant_bit(key), key_width);
+        DDCHECK_LT(index, m_length);
+        DDCHECK_LT((static_cast<size_t>(index)*key_width)/storage_bitwidth + ((index)* key_width) % storage_bitwidth, storage_bitwidth*ceil_div<size_t>(m_length*key_width, storage_bitwidth) );
+
+        tdc::tdc_sdsl::bits_impl<>::write_int(reinterpret_cast<uint64_t*>(m_data + (static_cast<size_t>(index)*key_width)/storage_bitwidth), key, ((index)* key_width) % storage_bitwidth, key_width);
+    }
+    public:
+
+    void write(size_t index, size_t key, uint_fast8_t key_width) const {
+        DCHECK_EQ(m_key_width, key_width);
+        DDCHECK_LE(most_significant_bit(key), key_width);
+        DDCHECK_LT(index, m_length);
+        DCHECK_EQ(m_plain_data[index], read(index, key_width));
+        m_plain_data[index] = key;
+
+        write_(index, key, key_width);
+
+        DCHECK_EQ(key, read(index, key_width));
+#ifndef NDEBUG
+        for(size_t i = 0; i < m_length; ++i) {
+            read(i, key_width);
+        }
+#endif//NDEBUG
+    }
+
+    private:
+#ifndef NDEBUG
+    size_t find_debug(const size_t position_from, const storage_type& key, const size_t position_to, [[maybe_unused]] const uint_fast8_t key_width = 0) const {
+       for(size_t i = position_from; i < position_to; ++i) {
+           if(m_plain_data[i] == key) return i;
+        }
+       return -1ULL;
+    }
+#endif//NDEBUG
+
+        public:
+
     /*
      * search in the interval [`position_from`, `position_to`) for `key`
      */
-    size_t find(const size_t position_from, const storage_type& key, const size_t position_to, [[maybe_unused]] const uint_fast8_t width = 0) const {
-      DDCHECK_LE(position_to, m_length);
-      for(size_t i = position_from; i < position_to; ++i) {
-        if(m_data[i] == key) return i;
-      }
-      return -1ULL;
+    size_t find(const size_t position_from, const storage_type& key, const size_t position_to, const uint_fast8_t key_width = 0) const {
+        DCHECK_EQ(m_key_width, key_width);
+
+        DCHECK_LT(position_from, position_to);
+        DCHECK_LE(position_to, m_length);
+       uint8_t offset = (position_from * key_width) % storage_bitwidth;
+       const uint64_t* it = reinterpret_cast<uint64_t*>(m_data +  (position_from * key_width)/storage_bitwidth);
+
+       for(size_t i = 0; i < position_to-position_from; ++i) { // TODO
+            const storage_type read_key = tdc::tdc_sdsl::bits_impl<>::read_int_and_move(it, offset, key_width);
+            DDCHECK_EQ(read_key, m_plain_data[i+position_from]);
+            if(read_key == key) {
+                return position_from+i;
+            }
+       }
+       DCHECK_EQ(find_debug(position_from, key, position_to, key_width), -1ULL);
+       return -1ULL;
     }
 
     core_group() = default;
@@ -98,18 +247,22 @@ class core_group {
         : m_data(std::move(other.m_data))
     {
         other.m_data = nullptr;
-        ON_DEBUG(m_length = other.m_length; other.m_data = 0;)
+        ON_DEBUG(m_plain_data = std::move(other.m_plain_data));
+        ON_DEBUG(other.m_plain_data = nullptr);
+        ON_DEBUG(m_length = other.m_length; other.m_plain_data = 0;)
     }
-    core_group(storage_type*&& keys) 
-        : m_data(std::move(keys))
-    {
-        keys = nullptr;
-    }
+    // core_group(storage_type*&& keys) 
+    //     : m_plain_data(std::move(keys))
+    // {
+    //     keys = nullptr;
+    // }
 
     core_group& operator=(core_group&& other) {
         clear();
         m_data = std::move(other.m_data);
         other.m_data = nullptr;
+        ON_DEBUG(m_plain_data = std::move(other.m_plain_data));
+        ON_DEBUG(other.m_plain_data = nullptr);
         ON_DEBUG(m_length = other.m_length; other.m_length = 0;)
         return *this;
     }
@@ -391,8 +544,10 @@ class keyvalue_group {
       DCHECK_LT(groupindex, m_groupsize);
       const size_t group_begin = groupindex == 0 ? 0 : find_group_position(groupindex-1)+1;
       const size_t group_next_begin = find_group_position(groupindex);
+      DCHECK_LE(group_begin, group_next_begin);
+      if(group_next_begin == group_begin) { return -1ULL; } //! group is empty
       const size_t ret = m_keys.find(group_begin-groupindex, key, group_next_begin-groupindex, keywidth);
-      return ret == (-1ULL) ? (-1ULL) : ret - (group_begin-groupindex); // do not subtract position from invalid position -1ULL
+      return ret == (-1ULL) ? (-1ULL) : ret - (group_begin-groupindex); //! do not subtract position from invalid position -1ULL
     }
 
 
@@ -771,6 +926,8 @@ class group_chaining_table {
 
     //! returns the maximum value of a key that can be stored
     key_type max_key() const { return (-1ULL) >> (64-m_key_width); }
+    //! returns the maximum value that can be stored
+    value_type max_value() const { return (-1ULL) >> (64-m_value_width); }
 
     //! returns the bit width of the keys
     uint_fast8_t key_width() const { return m_key_width; }

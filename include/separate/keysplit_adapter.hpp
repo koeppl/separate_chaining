@@ -31,6 +31,7 @@ class keysplit_adapter {
 
     //! returns the maximum value of a key that can be stored
    constexpr key_type max_key() const { return std::min<key_type>( (-1ULL)>>(64-max_bits), std::numeric_limits<key_type>::max()); }
+   constexpr value_type max_value() const { return std::numeric_limits<value_type>::max(); }
 
    constexpr uint_fast8_t key_width() const { return max_bits; }
 
@@ -156,6 +157,7 @@ class keysplit_adapter64 {
 
     //! returns the maximum value of a key that can be stored
    constexpr key_type max_key() const { return std::numeric_limits<key_type>::max(); }
+   constexpr value_type max_value() const { return std::numeric_limits<value_type>::max(); }
    constexpr uint_fast8_t key_width() const { return max_bits; }
 
    void clear() {

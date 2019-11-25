@@ -447,6 +447,7 @@ class separate_chaining_table {
 
     //! returns the maximum value of a key that can be stored
     key_type max_key() const { return (-1ULL) >> (64-m_width); }
+    constexpr value_type max_value() const { return std::numeric_limits<value_type>::max(); }
 
     //! returns the bit width of the keys
     uint_fast8_t key_width() const { return m_width; }
