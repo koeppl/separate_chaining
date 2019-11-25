@@ -44,27 +44,19 @@ class core_group {
         )
         ON_DEBUG(m_length = 0;)
     }
-
-    // storage_type& operator[](const size_t index) {
-    //     DDCHECK_LT(index, m_length);
-    //     return m_plain_data[index];
-    // }
-    // const storage_type& operator[](const size_t index) const {
-    //     DDCHECK_LT(index, m_length);
-    //     return m_plain_data[index];
-    // }
-    //
+    
     void initialize(const uint_fast8_t width) {
+#ifndef NDEBUG
        DDCHECK(m_plain_data == nullptr);
        m_plain_data = reinterpret_cast<storage_type*>(malloc(sizeof(storage_type)));
        m_plain_data[0] = 0;
-       ON_DEBUG(m_key_width = width;)
-       ON_DEBUG(m_length = 0;)
-
+       m_key_width = width;
+       m_length = 0;
        DDCHECK(m_data == nullptr);
+#endif//NDEBUG
+
        m_data = reinterpret_cast<internal_type*>  (malloc(sizeof(internal_type)* ceil_div<size_t>(width, storage_bitwidth) ));
        memset(m_data, 0, sizeof(internal_type)* ceil_div<size_t>(width, storage_bitwidth));
-       // ON_DEBUG(m_length = ceil_div<size_t>(width, storage_bitwidth);)
     }
 
     void erase(const size_t index, const uint_fast8_t key_width, size_t length) { //! length = old length
@@ -97,14 +89,14 @@ class core_group {
 
 #ifndef NDEBUG
        for(size_t i = 0; i < m_length; ++i) {
-           DCHECK_EQ(m_plain_data[i], read(i, key_width));
+           DDCHECK_EQ(m_plain_data[i], read(i, key_width));
        }
 #endif //NDEBUG
     }
 
 
     void insert(const size_t index, const storage_type& key, const uint_fast8_t keywidth, size_t length) { //! length = old length
-      DCHECK_EQ(m_key_width, keywidth);
+      DDCHECK_EQ(m_key_width, keywidth);
       DDCHECK(m_plain_data != nullptr);
       DDCHECK_EQ(length, m_length);
 #ifndef NDEBUG
@@ -121,15 +113,17 @@ class core_group {
            m_data = reinterpret_cast<internal_type*>  (realloc(m_data, sizeof(internal_type)* newblocksize));
            m_data[newblocksize-1] = 0;
        }
+
        size_t newkey = key;
-       for(size_t i = index; i < m_length; ++i) { //TODO: this can be speed up with word-packing
+       for(size_t i = index; i < length+1; ++i) { //TODO: this can be speed up with word-packing
            const size_t oldkey = read_(i, keywidth);
            write_(i, newkey, keywidth);
            newkey = oldkey;
        }
+
        // const uint8_t offset = (index * keywidth) % storage_bitwidth;
        // uint64_t* it = reinterpret_cast<uint64_t*>(m_data +  (index* keywidth)/storage_bitwidth);
-       // DCHECK_LT(offset+keywidth, 64);
+       // DDCHECK_LT(offset+keywidth, 64);
        //
        // uint64_t& current_block = *it;
        // const uint_fast8_t current_offset = std::min(offset+keywidth, 64);
@@ -155,7 +149,7 @@ class core_group {
        // }
 #ifndef NDEBUG
        for(size_t i = 0; i < length; ++i) {
-           DCHECK_EQ(m_plain_data[i], read(i, keywidth));
+           DDCHECK_EQ(m_plain_data[i], read(i, keywidth));
        }
 #endif //NDEBUG
 
@@ -163,7 +157,7 @@ class core_group {
 
     private:
     storage_type read_(size_t i, uint_fast8_t key_width) const { // direct access without debug check
-      DCHECK_EQ(m_key_width, key_width);
+      DDCHECK_EQ(m_key_width, key_width);
         DDCHECK_LT(i, m_length);
         DDCHECK_LT((static_cast<size_t>(i)*key_width)/storage_bitwidth + ((i)* key_width) % storage_bitwidth, storage_bitwidth*ceil_div<size_t>(m_length*key_width, storage_bitwidth) );
         return tdc::tdc_sdsl::bits_impl<>::read_int(reinterpret_cast<uint64_t*>(m_data + (static_cast<size_t>(i)*key_width)/storage_bitwidth), ((i)* key_width) % storage_bitwidth, key_width);
@@ -171,16 +165,16 @@ class core_group {
 
     public:
     storage_type read(size_t i, uint_fast8_t key_width) const {
-        DCHECK_EQ(m_key_width, key_width);
+        DDCHECK_EQ(m_key_width, key_width);
         const size_t ret = read_(i, key_width);
-        DCHECK_EQ(m_plain_data[i], ret);
+        DDCHECK_EQ(m_plain_data[i], ret);
         return ret;
 
     }
 
     private:
     void write_(size_t index, size_t key, uint_fast8_t key_width) const {
-        DCHECK_EQ(m_key_width, key_width);
+        DDCHECK_EQ(m_key_width, key_width);
         DDCHECK_LE(most_significant_bit(key), key_width);
         DDCHECK_LT(index, m_length);
         DDCHECK_LT((static_cast<size_t>(index)*key_width)/storage_bitwidth + ((index)* key_width) % storage_bitwidth, storage_bitwidth*ceil_div<size_t>(m_length*key_width, storage_bitwidth) );
@@ -190,15 +184,15 @@ class core_group {
     public:
 
     void write(size_t index, size_t key, uint_fast8_t key_width) const {
-        DCHECK_EQ(m_key_width, key_width);
+        DDCHECK_EQ(m_key_width, key_width);
         DDCHECK_LE(most_significant_bit(key), key_width);
         DDCHECK_LT(index, m_length);
-        DCHECK_EQ(m_plain_data[index], read(index, key_width));
-        m_plain_data[index] = key;
+        DDCHECK_EQ(m_plain_data[index], read(index, key_width));
+        ON_DEBUG(m_plain_data[index] = key);
 
         write_(index, key, key_width);
 
-        DCHECK_EQ(key, read(index, key_width));
+        DDCHECK_EQ(key, read(index, key_width));
 #ifndef NDEBUG
         for(size_t i = 0; i < m_length; ++i) {
             read(i, key_width);
@@ -222,10 +216,10 @@ class core_group {
      * search in the interval [`position_from`, `position_to`) for `key`
      */
     size_t find(const size_t position_from, const storage_type& key, const size_t position_to, const uint_fast8_t key_width = 0) const {
-        DCHECK_EQ(m_key_width, key_width);
+        DDCHECK_EQ(m_key_width, key_width);
 
-        DCHECK_LT(position_from, position_to);
-        DCHECK_LE(position_to, m_length);
+        DDCHECK_LT(position_from, position_to);
+        DDCHECK_LE(position_to, m_length);
        uint8_t offset = (position_from * key_width) % storage_bitwidth;
        const uint64_t* it = reinterpret_cast<uint64_t*>(m_data +  (position_from * key_width)/storage_bitwidth);
 
@@ -236,7 +230,7 @@ class core_group {
                 return position_from+i;
             }
        }
-       DCHECK_EQ(find_debug(position_from, key, position_to, key_width), -1ULL);
+       DDCHECK_EQ(find_debug(position_from, key, position_to, key_width), -1ULL);
        return -1ULL;
     }
 
@@ -321,9 +315,9 @@ class keyvalue_group {
     size_t bucketsize(size_t i) const {  //! returns the number of elements in the i-th bucket
         if(empty()) { return 0; }
         const size_t prev_position = (i == 0) ? 0 : find_group_position(i-1) - (i-1);
-        DCHECK_GE(find_group_position(i), i + prev_position);
+        DDCHECK_GE(find_group_position(i), i + prev_position);
         const size_t ret = find_group_position(i) - i - prev_position;
-        DCHECK_EQ(ret, m_border_array[i] - (i == 0 ? 0 : m_border_array[i-1]));
+        DDCHECK_EQ(ret, m_border_array[i] - (i == 0 ? 0 : m_border_array[i-1]));
         return ret;
     }
 
@@ -345,7 +339,7 @@ class keyvalue_group {
        m_values.initialize(valuewidth);
        m_size = 0;
 
-       DCHECK_LT(groupsize, std::numeric_limits<decltype(m_groupsize)>::max());
+       DDCHECK_LT(groupsize, std::numeric_limits<decltype(m_groupsize)>::max());
        m_groupsize = groupsize;
        m_border = reinterpret_cast<internal_type*>  (malloc(sizeof(internal_type)* ceil_div<size_t>(groupsize+1, internal_bitwidth) ));
        memset(m_border, static_cast<char>(-1ULL), ceil_div<size_t>(groupsize+1, 8)); // groupsize+1 as we use the last '1' as a dummy border
@@ -353,15 +347,15 @@ class keyvalue_group {
        last_border = static_cast<internal_type>(-1ULL)>>(internal_bitwidth - ((groupsize+1) % internal_bitwidth));
 
       ON_DEBUG(m_border_length = ceil_div<size_t>(groupsize+1, internal_bitwidth);)
-      // ON_DEBUG( // TODO: make debug only
+      ON_DEBUG( // TODO: make debug only
               m_border_array.resize(groupsize, 0);
               {
               size_t sum = 0;
               for(size_t i = 0; i < m_border_length;++i) {
                 sum += __builtin_popcountll(m_border[i]);
               }
-              DCHECK_EQ(sum, m_groupsize+1);
-              }//);
+              DDCHECK_EQ(sum, m_groupsize+1);
+              });
     }
 
     // void resize(const size_t oldsize, const size_t length, const size_t keywidth, const size_t valuewidth) {
@@ -392,7 +386,7 @@ class keyvalue_group {
     }
 
     void push_back(const group_index_type groupindex, const storage_type key, const uint_fast8_t keywidth, const storage_type value, const uint_fast8_t valuewidth) {
-      DCHECK_LT(m_size, std::numeric_limits<bucketsize_type>::max());
+      DDCHECK_LT(m_size, std::numeric_limits<bucketsize_type>::max());
 
       const size_t group_ending = find_group_position(groupindex);
       m_keys.insert(group_ending-groupindex, key, keywidth, m_size);
@@ -404,7 +398,7 @@ class keyvalue_group {
           m_border[new_border_size-1] = 0;
           ON_DEBUG(++m_border_length;)
       }
-      DCHECK_EQ(new_border_size, m_border_length);
+      DDCHECK_EQ(new_border_size, m_border_length);
 
       internal_type& current_chunk = m_border[group_ending/internal_bitwidth];
 
@@ -427,14 +421,14 @@ class keyvalue_group {
           ++m_border_array[i];
       }
       for(size_t i = 0; i < m_border_array.size(); ++i) {
-          DCHECK_EQ(m_border_array[i], find_group_position(i)-i);
+          DDCHECK_EQ(m_border_array[i], find_group_position(i)-i);
       }
       { // check whether all group '1's are still set
           size_t sum = 0;
           for(size_t i = 0; i < m_border_length;++i) {
               sum += __builtin_popcountll(m_border[i]);
           }
-          DCHECK_EQ(sum, m_groupsize+1);
+          DDCHECK_EQ(sum, m_groupsize+1);
       }
       );//ON_DEBUG
     }
@@ -445,21 +439,21 @@ class keyvalue_group {
       const size_t array_index = group_begin - prev_groupindex + position;
 
       const size_t group_ending = find_group_position(groupindex);
-      DCHECK_LT(group_begin+position, group_ending);
+      DDCHECK_LT(group_begin+position, group_ending);
       m_keys.erase(array_index, keywidth, m_size);
       m_values.erase(array_index, valuewidth, m_size);
 
       // TODO: shrink size
       const size_t border_size = ceil_div<size_t>(m_size + 1 + m_groupsize, internal_bitwidth);
-      DCHECK_EQ(border_size, m_border_length);
+      DDCHECK_EQ(border_size, m_border_length);
     
       const size_t group_border_current = group_ending/internal_bitwidth;
-      DCHECK_LT(group_border_current, border_size);
+      DDCHECK_LT(group_border_current, border_size);
 
       internal_type& current_chunk = m_border[group_border_current];
       if(group_ending % internal_bitwidth == 0) { // if the group ends with the first bit in the current block, we make this bit the highest bit of the previous block
-          DCHECK_EQ(m_border[group_border_current-1] & (1ULL<<(internal_bitwidth-1)), 0);
-          DCHECK_EQ(m_border[group_border_current] & 1ULL, 1);
+          DDCHECK_EQ(m_border[group_border_current-1] & (1ULL<<(internal_bitwidth-1)), 0);
+          DDCHECK_EQ(m_border[group_border_current] & 1ULL, 1);
           m_border[group_border_current-1] |= 1ULL<<(internal_bitwidth-1);
           current_chunk >>= 1;
       } else {
@@ -469,8 +463,8 @@ class keyvalue_group {
           //     current_chunk = current_chunk & ((-1ULL)>>(65-internal_bitwidth)); // remove the most significant bit
           // } else {
 
-          DCHECK_NE(current_chunk & (1ULL<< (group_ending % internal_bitwidth)), 0);
-          DCHECK_EQ(current_chunk & (1ULL<< ((group_ending-1) % internal_bitwidth)), 0);
+          DDCHECK_NE(current_chunk & (1ULL<< (group_ending % internal_bitwidth)), 0);
+          DDCHECK_EQ(current_chunk & (1ULL<< ((group_ending-1) % internal_bitwidth)), 0);
           current_chunk = ((current_chunk) &  ((1ULL<< (group_ending % internal_bitwidth))-1) )
               | ((current_chunk &  (-1ULL<< (group_ending % internal_bitwidth)))>>1);
           // }
@@ -490,7 +484,7 @@ class keyvalue_group {
           m_border = reinterpret_cast<internal_type*>(realloc(m_border, sizeof(internal_type) * new_border_size));
           ON_DEBUG(--m_border_length;)
       }
-      DCHECK_EQ(new_border_size, m_border_length);
+      DDCHECK_EQ(new_border_size, m_border_length);
 
 
       ON_DEBUG(// check whether the group sizes are correct
@@ -499,40 +493,40 @@ class keyvalue_group {
           --m_border_array[i];
       }
       for(size_t i = 0; i < m_border_array.size(); ++i) {
-          DCHECK_EQ(m_border_array[i], find_group_position(i)-i);
+          DDCHECK_EQ(m_border_array[i], find_group_position(i)-i);
       }
       { // check whether all group '1's are still set
           size_t sum = 0;
           for(size_t i = 0; i < m_border_length;++i) {
               sum += __builtin_popcountll(m_border[i]);
           }
-          DCHECK_EQ(sum, m_groupsize+1);
+          DDCHECK_EQ(sum, m_groupsize+1);
       }
       );//ON_DEBUG
     }
 
     storage_type read_key(size_t groupindex, size_t position, uint_fast8_t keywidth) const {
-      DCHECK_LT(groupindex, m_groupsize);
+      DDCHECK_LT(groupindex, m_groupsize);
       const size_t group_begin = groupindex == 0 ? 0 : find_group_position(groupindex-1)+1;
       return  m_keys.read(group_begin+position-groupindex, keywidth);
     }
     storage_type read_value(size_t groupindex, size_t position, uint_fast8_t valuewidth) const {
-      DCHECK_LT(groupindex, m_groupsize);
+      DDCHECK_LT(groupindex, m_groupsize);
       const size_t group_begin = groupindex == 0 ? 0 : find_group_position(groupindex-1)+1;
       return  m_values.read(group_begin+position-groupindex, valuewidth);
     }
     void write_value(size_t groupindex, size_t position, size_t value, uint_fast8_t valuewidth) const {
-      DCHECK_LT(groupindex, m_groupsize);
+      DDCHECK_LT(groupindex, m_groupsize);
       const size_t group_begin = groupindex == 0 ? 0 : find_group_position(groupindex-1)+1;
       m_values.write(group_begin+position-groupindex, value, valuewidth);
     }
 
     std::pair<storage_type,storage_type> read(size_t groupindex, size_t position, uint_fast8_t keywidth, uint_fast8_t valuewidth) const {
-      DCHECK_LT(groupindex, m_groupsize);
+      DDCHECK_LT(groupindex, m_groupsize);
       const size_t group_begin = groupindex == 0 ? 0 : find_group_position(groupindex-1)+1;
       ON_DEBUG(
           const size_t next_group_begin = find_group_position(groupindex);
-          DCHECK_LT(position, next_group_begin-group_begin);
+          DDCHECK_LT(position, next_group_begin-group_begin);
           );
       return { m_keys.read(group_begin+position-groupindex, keywidth), m_values.read(group_begin+position-groupindex, valuewidth) };
     }
@@ -541,10 +535,10 @@ class keyvalue_group {
      * Gives the position of the entry with key `key` inside the group `groupindex`, or -1 if such an entry does not exist.
      */
     size_t find(const group_index_type groupindex, const storage_type& key, const uint_fast8_t keywidth) const {
-      DCHECK_LT(groupindex, m_groupsize);
+      DDCHECK_LT(groupindex, m_groupsize);
       const size_t group_begin = groupindex == 0 ? 0 : find_group_position(groupindex-1)+1;
       const size_t group_next_begin = find_group_position(groupindex);
-      DCHECK_LE(group_begin, group_next_begin);
+      DDCHECK_LE(group_begin, group_next_begin);
       if(group_next_begin == group_begin) { return -1ULL; } //! group is empty
       const size_t ret = m_keys.find(group_begin-groupindex, key, group_next_begin-groupindex, keywidth);
       return ret == (-1ULL) ? (-1ULL) : ret - (group_begin-groupindex); //! do not subtract position from invalid position -1ULL
@@ -811,7 +805,7 @@ class group_chaining_table {
 
     ON_DEBUG(key_type** m_plainkeys = nullptr;) //!bucket for keys in plain format for debugging purposes
     ON_DEBUG(value_type** m_plainvalues = nullptr;) //!bucket for values in plain format for debugging purposes
-    ON_DEBUG(bucketsize_type* m_bucketsizes = nullptr); //! size of each bucket for debugging purposes
+    ON_DEBUG(bucketsize_type* m_bucketsizes = nullptr;) //! size of each bucket for debugging purposes
     // END member variables
 
 
@@ -980,16 +974,16 @@ class group_chaining_table {
         return m_groups[n].size();
     }
 
-    group_chaining_table(size_t keywidth = sizeof(key_type)*8, size_t valuewidth = sizeof(value_type)*8) 
-        : m_key_width(keywidth)
-        , m_value_width(valuewidth)
+    group_chaining_table(size_t key_width = sizeof(key_type)*8, size_t value_width = sizeof(value_type)*8) 
+        : m_key_width(key_width)
+        , m_value_width(value_width)
         , m_hash(m_key_width) 
-        , m_overflow(m_key_width)
+        , m_overflow(m_key_width, m_value_width)
     {
-        DDCHECK_GT(keywidth, 1);
-        DDCHECK_LE(keywidth, 64);
-        DDCHECK_GT(valuewidth, 1);
-        DDCHECK_LE(valuewidth, 64);
+        DDCHECK_GT(m_value_width, 1);
+        DDCHECK_LE(m_value_width, sizeof(value_type)*8);
+        DDCHECK_GT(m_key_width, 1);
+        DDCHECK_LE(m_key_width, sizeof(key_type)*8);
     }
 
     // separate_chaining_table(separate_chaining_table&& other)
@@ -1186,8 +1180,8 @@ class group_chaining_table {
         for(size_t i = 0; i < bucket_size; ++i) { 
             const key_type read_quotient = group.read_key(rank_in_group(bucket),i, quotient_width);
             const key_type read_key = m_hash.inv_map(read_quotient, bucket, m_buckets);
-            DCHECK_EQ(m_plainvalues[bucket][i], group.read_value(rank_in_group(bucket), i, value_width()));
-            DCHECK_EQ(read_key, bucket_plainkeys[i]);
+            DDCHECK_EQ(m_plainvalues[bucket][i], group.read_value(rank_in_group(bucket), i, value_width()));
+            DDCHECK_EQ(read_key, bucket_plainkeys[i]);
             if(read_quotient == quotient) {
                 plain_position = i;
                 break;
@@ -1281,10 +1275,10 @@ class group_chaining_table {
 
 #ifndef NDEBUG
         value_type*& bucket_plainvalues = m_plainvalues[bucket];
-        DCHECK_EQ(m_bucketsizes[bucket], bucket_size);
+        DDCHECK_EQ(m_bucketsizes[bucket], bucket_size);
         if(m_bucketsizes[bucket] == 0) {
-            DCHECK(bucket_plainkeys == nullptr);
-            DCHECK(bucket_plainvalues == nullptr);
+            DDCHECK(bucket_plainkeys == nullptr);
+            DDCHECK(bucket_plainvalues == nullptr);
             bucket_plainkeys   = reinterpret_cast<key_type*>  (malloc(sizeof(key_type)));
             bucket_plainvalues = reinterpret_cast<key_type*>  (malloc(sizeof(value_type)));
         } else {
@@ -1302,7 +1296,7 @@ class group_chaining_table {
         DDCHECK_LE(quotient_width, sizeof(key_type)*8);
 
         group.push_back(rank_in_group(bucket), quotient, quotient_width, value, value_width());
-        DCHECK_EQ(m_bucketsizes[bucket], group.bucketsize(rank_in_group(bucket)));
+        DDCHECK_EQ(m_bucketsizes[bucket], group.bucketsize(rank_in_group(bucket)));
 
         DDCHECK_EQ(m_hash.inv_map(group.read_key(rank_in_group(bucket), bucket_size, quotient_width), bucket, m_buckets), key);
         DDCHECK_EQ(bucket_plainvalues[bucket_size], group.read_value(rank_in_group(bucket), bucket_size, value_width()));
@@ -1361,8 +1355,8 @@ class group_chaining_table {
 
             const key_type read_quotient = group.read_key(rank_in_group(bucket),position, quotient_width);
             const key_type read_key = m_hash.inv_map(read_quotient, bucket, m_buckets);
-            DCHECK_EQ(read_key, bucket_plainkeys[position]);
-            DCHECK_EQ(bucket_plainvalues[position], group.read_value(rank_in_group(bucket), position, value_width()));
+            DDCHECK_EQ(read_key, bucket_plainkeys[position]);
+            DDCHECK_EQ(bucket_plainvalues[position], group.read_value(rank_in_group(bucket), position, value_width()));
             for(size_t i = position+1; i < bucket_size; ++i) {
                 bucket_plainkeys[i-1] = bucket_plainkeys[i];
                 bucket_plainvalues[i-1] = bucket_plainvalues[i];
@@ -1375,12 +1369,12 @@ class group_chaining_table {
         group.erase(rank_in_group(bucket), position, quotient_width, value_width());
 
 #ifndef NDEBUG
-        DCHECK_EQ(bucket_size, group.bucketsize(rank_in_group(bucket)));
+        DDCHECK_EQ(bucket_size, group.bucketsize(rank_in_group(bucket)));
         for(size_t i = 0; i < bucket_size; ++i) { 
             const key_type read_quotient = group.read_key(rank_in_group(bucket),i, quotient_width);
             const key_type read_key = m_hash.inv_map(read_quotient, bucket, m_buckets);
-            DCHECK_EQ(read_key, bucket_plainkeys[i]);
-            DCHECK_EQ(bucket_plainvalues[i], group.read_value(rank_in_group(bucket), i, value_width()));
+            DDCHECK_EQ(read_key, bucket_plainkeys[i]);
+            DDCHECK_EQ(bucket_plainvalues[i], group.read_value(rank_in_group(bucket), i, value_width()));
         }
 
 #endif//NDEBUG

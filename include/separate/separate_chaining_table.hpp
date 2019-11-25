@@ -350,7 +350,8 @@ class separate_chaining_table {
 
     uint_fast8_t m_buckets = 0; //! log_2 of the number of buckets
     size_t m_elements = 0; //! number of stored elements
-    uint_fast8_t m_width;
+    uint_fast8_t m_key_width;
+    uint_fast8_t m_value_width;
     hash_mapping_type m_hash; //! hash function
 
     mutable overflow_type m_overflow; //TODO: cht_overflow has non-const operations
@@ -446,11 +447,13 @@ class separate_chaining_table {
     }
 
     //! returns the maximum value of a key that can be stored
-    key_type max_key() const { return (-1ULL) >> (64-m_width); }
-    constexpr value_type max_value() const { return std::numeric_limits<value_type>::max(); }
+    key_type max_key() const { return (-1ULL) >> (64-m_key_width); }
 
     //! returns the bit width of the keys
-    uint_fast8_t key_width() const { return m_width; }
+    uint_fast8_t key_width() const { return m_key_width; }
+
+    value_type max_value() const { return (-1ULL) >> (64 - m_value_width); }
+    uint_fast8_t value_width() const { return m_value_width; }
 
     //! @see std::unordered_map
     bool empty() const { return m_elements == 0; } 
@@ -469,7 +472,7 @@ class separate_chaining_table {
     #ifdef SEPARATE_MAX_BUCKET_SIZE
         return std::min<size_t>(SEPARATE_MAX_BUCKET_SIZE, std::numeric_limits<bucketsize_type>::max());
 #else
-        return std::numeric_limits<bucketsize_type>::max(); //, (separate_chaining::MAX_BUCKET_BYTESIZE*8)/m_width);
+        return std::numeric_limits<bucketsize_type>::max(); //, (separate_chaining::MAX_BUCKET_BYTESIZE*8)/m_key_width);
 #endif
     }
 
@@ -488,18 +491,21 @@ class separate_chaining_table {
         return m_bucketsizes[n];
     }
 
-    separate_chaining_table(size_t width = sizeof(key_type)*8) 
-        : m_width(width)
-        , m_hash(m_width) 
-        , m_overflow(width)
+    separate_chaining_table(uint_fast8_t key_width = sizeof(key_type)*8, uint_fast8_t value_width = sizeof(value_type)*8) 
+        : m_key_width(key_width)
+        , m_value_width(value_width)
+        , m_hash(m_key_width) 
+        , m_overflow(m_key_width, m_value_width)
     {
-        DDCHECK_GT(width, 1);
-        DDCHECK_LE(width, 64);
-        // DDCHECK_LE(width, sizeof(key_type)*8);
+        DDCHECK_GT(m_value_width, 1);
+        DDCHECK_LE(m_value_width, sizeof(value_type)*8);
+        DDCHECK_GT(m_key_width, 1);
+        DDCHECK_LE(m_key_width, sizeof(key_type)*8);
     }
 
     separate_chaining_table(separate_chaining_table&& other)
-       : m_width(other.m_width)
+       : m_key_width(other.m_key_width)
+       , m_value_width(other.m_value_width)
        , m_keys(std::move(other.m_keys))
        , m_value_manager(std::move(other.m_value_manager))
        , m_bucketsizes(std::move(other.m_bucketsizes))
@@ -515,9 +521,10 @@ class separate_chaining_table {
     }
 
     separate_chaining_table& operator=(separate_chaining_table&& other) {
-        // DDCHECK_EQ(m_width, other.m_width);
+        // DDCHECK_EQ(m_key_width, other.m_key_width);
         clear();
-        m_width       = std::move(other.m_width);
+        m_key_width       = std::move(other.m_key_width);
+        m_value_width       = std::move(other.m_value_width);
         m_keys        = std::move(other.m_keys);
         m_value_manager      = std::move(other.m_value_manager);
         m_buckets     = std::move(other.m_buckets);
@@ -531,10 +538,11 @@ class separate_chaining_table {
         return *this;
     }
     void swap(separate_chaining_table& other) {
-        // DDCHECK_EQ(m_width, other.m_width);
+        // DDCHECK_EQ(m_key_width, other.m_key_width);
         ON_DEBUG(std::swap(m_plainkeys, other.m_plainkeys);)
 
-        std::swap(m_width, other.m_width);
+        std::swap(m_key_width, other.m_key_width);
+        std::swap(m_value_width, other.m_value_width);
         std::swap(m_keys, other.m_keys);
         std::swap(m_value_manager, other.m_value_manager);
         std::swap(m_buckets, other.m_buckets);
@@ -562,7 +570,8 @@ class separate_chaining_table {
             }
             std::sort(bucket_sizes.begin(), bucket_sizes.end());
             statphase.log("deviation_bucket_size", deviation);
-            statphase.log("width", m_width);
+            statphase.log("key_width", m_key_width);
+            statphase.log("value_width", m_value_width);
             statphase.log("median_bucket_size", 
                     (bucket_sizes.size() % 2 != 0)
                     ? static_cast<double>(bucket_sizes[bucket_sizes.size()/2])
@@ -594,7 +603,7 @@ class separate_chaining_table {
             m_buckets = reserve_bits;
             m_overflow.resize_buckets(new_size);
         } else {
-            separate_chaining_table tmp_map(m_width);
+            separate_chaining_table tmp_map(m_key_width, m_value_width);
             tmp_map.reserve(new_size);
 #if STATS_ENABLED
             tdc::StatPhase statphase(std::string("resizing to ") + std::to_string(reserve_bits));
@@ -818,7 +827,7 @@ class separate_chaining_table {
         if(bucket_size == 0) {
             bucket_size = 1;
             bucket_keys.initiate(resize_strategy_type::INITIAL_BUCKET_SIZE, key_width());
-            bucket_values.initiate(resize_strategy_type::INITIAL_BUCKET_SIZE, sizeof(value_type)*8);
+            bucket_values.initiate(resize_strategy_type::INITIAL_BUCKET_SIZE, value_width());
             m_resize_strategy.assign(resize_strategy_type::INITIAL_BUCKET_SIZE, bucket);
             ON_DEBUG(bucket_plainkeys   = reinterpret_cast<key_type*>  (malloc(sizeof(key_type))));
         } else {
@@ -922,7 +931,7 @@ class separate_chaining_table {
 
         size_t bytes = 
             sizeof(m_resize_strategy) * bucket_count() + 
-            sizeof(m_keys) + sizeof(m_value_manager) + sizeof(m_bucketsizes) + sizeof(m_buckets) + sizeof(m_elements) + sizeof(m_width) + sizeof(m_hash);
+            sizeof(m_keys) + sizeof(m_value_manager) + sizeof(m_bucketsizes) + sizeof(m_buckets) + sizeof(m_elements) + sizeof(m_key_width) + sizeof(m_value_width) + sizeof(m_hash);
         for(size_t bucket = 0; bucket < bucket_count(); ++bucket) {
             bytes += ceil_div<size_t>(m_bucketsizes[bucket]*key_bitwidth, sizeof(key_type)*8)*sizeof(key_type);
             bytes += m_value_manager.value_width() *(m_bucketsizes[bucket]);
@@ -933,7 +942,8 @@ class separate_chaining_table {
 
     void serialize(std::ostream& os) const {
         m_overflow.serialize(os);
-        os.write(reinterpret_cast<const char*>(&m_width), sizeof(decltype(m_width)));
+        os.write(reinterpret_cast<const char*>(&m_key_width), sizeof(decltype(m_key_width)));
+        os.write(reinterpret_cast<const char*>(&m_value_width), sizeof(decltype(m_value_width)));
         os.write(reinterpret_cast<const char*>(&m_buckets), sizeof(decltype(m_buckets)));
         os.write(reinterpret_cast<const char*>(&m_elements), sizeof(decltype(m_elements)));
         const size_t cbucket_count = bucket_count();
@@ -953,8 +963,8 @@ class separate_chaining_table {
         clear();
         m_overflow.deserialize(is);
         decltype(m_buckets) buckets;
-        is.read(reinterpret_cast<char*>(&m_width), sizeof(decltype(m_width)));
-        m_hash = hash_mapping_type(m_width);
+        is.read(reinterpret_cast<char*>(&m_value_width), sizeof(decltype(m_value_width)));
+        m_hash = hash_mapping_type(m_key_width);
         is.read(reinterpret_cast<char*>(&buckets), sizeof(decltype(buckets)));
         reserve(1ULL<<buckets);
         DDCHECK_EQ(m_buckets, buckets);

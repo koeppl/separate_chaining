@@ -213,14 +213,12 @@ class compact_chaining_map {
         : m_key_width(key_width)
         , m_value_width(value_width)
         , m_hash(m_key_width) 
-        , m_overflow(m_key_width)
+        , m_overflow(m_key_width, m_value_width)
     {
-        DDCHECK_GT(key_width, 1);
-        DDCHECK_LE(key_width, 64);
-        DDCHECK_LE(key_width, 8*sizeof(key_type));
-        DDCHECK_GT(value_width, 1);
-        DDCHECK_LE(value_width, 64);
-        // DDCHECK_LE(width, sizeof(key_type)*8);
+        DDCHECK_GT(m_value_width, 1);
+        DDCHECK_LE(m_value_width, sizeof(value_type)*8);
+        DDCHECK_GT(m_key_width, 1);
+        DDCHECK_LE(m_key_width, sizeof(key_type)*8);
     }
 
     compact_chaining_map(compact_chaining_map&& other)
