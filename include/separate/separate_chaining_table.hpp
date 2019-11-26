@@ -26,7 +26,6 @@ struct separate_chaining_navigator {
         using key_type = typename hash_map::key_type;
         using value_type = typename hash_map::value_type;
         using value_ref_type = typename hash_map::value_ref_type;
-        using value_constref_type = typename hash_map::value_constref_type;
         using size_type = typename hash_map::size_type;
         using class_type = separate_chaining_navigator<hash_map>;
 
@@ -74,21 +73,30 @@ struct separate_chaining_navigator {
             return read_key;
         }
         //typename std::add_const<value_type>::type& value() const {
-        value_constref_type value() const {
-            DDCHECK(!invalid());
-            if(m_map.m_overflow.size() > 0 && m_bucket == m_map.bucket_count()) {
-                return m_map.m_overflow[m_position];
-            }
-            value_constref_type i = m_map.value_at(m_bucket, m_position);
-            return i;
-        }
-        value_ref_type value_ref() {
+        value_type value() const {
             DDCHECK(!invalid());
             if(m_map.m_overflow.size() > 0 && m_bucket == m_map.bucket_count()) {
                 return m_map.m_overflow[m_position];
             }
             return m_map.value_at(m_bucket, m_position);
         }
+        // value_ref_type value_ref() {
+        //     DDCHECK(!invalid());
+        //     if(m_map.m_overflow.size() > 0 && m_bucket == m_map.bucket_count()) {
+        //         return m_map.m_overflow[m_position];
+        //     }
+        //     return m_map.value_at(m_bucket, m_position);
+        // }
+
+
+        operator value_type() const { // cast to value
+            return value();
+        }
+        class_type operator=(value_type val) {
+            m_map.write_value(m_bucket, m_position, val);
+            return *this;
+        }
+
 
         class_type& operator++() { 
             if(m_map.m_overflow.size() > 0 && m_bucket == m_map.bucket_count()) {
@@ -206,12 +214,13 @@ class null_value_bucket {
     bool& operator[](size_t)  {
         return m_true;
     }
+    bool read(size_t, size_t) const { return m_true; }
     const bool& operator[](size_t) const {
         return m_true;
     }
     constexpr void clear() {}
     constexpr void initiate(size_t,uint_fast8_t) {}
-    constexpr void resize([[maybe_unused]] const size_t oldsize, [[maybe_unused]] const size_t size) {}
+    constexpr void resize([[maybe_unused]] const size_t oldsize, [[maybe_unused]] const size_t size, [[maybe_unused]] const size_t width) {}
     null_value_bucket(null_value_bucket&&) {}
     null_value_bucket() = default;
     static constexpr void deserialize([[maybe_unused]] std::istream& is, [[maybe_unused]] const size_t length, [[maybe_unused]] const uint_fast8_t width) { }
@@ -366,7 +375,7 @@ class separate_chaining_table {
         if(bucket_size == 0) return;
         if(m_resize_strategy.can_shrink(bucket_size, bucket)) { 
             m_keys[bucket].resize(bucket_size, bucket_size, key_bitwidth);
-            m_value_manager[bucket].resize(bucket_size, bucket_size);
+            m_value_manager[bucket].resize(bucket_size, bucket_size, value_width());
             m_resize_strategy.assign(bucket_size, bucket);
         }
     }
@@ -436,15 +445,15 @@ class separate_chaining_table {
     public:
 
     //TODO: make private
-    storage_type quotient_at(const size_t bucket, const size_t position, uint_fast8_t key_bitwidth) const {
-            return m_keys[bucket].read(position, key_bitwidth);
+    storage_type quotient_at(const size_t bucket, const size_t position, uint_fast8_t quotient_width) const {
+            return m_keys[bucket].read(position, quotient_width);
     }
-    const value_type& value_at(const size_t bucket, const size_t position) const {
-        return m_value_manager[bucket][position];
+    const value_type value_at(const size_t bucket, const size_t position) const {
+        return m_value_manager[bucket].read(position, value_width());
     }
-    value_type& value_at(const size_t bucket, const size_t position) {
-        return m_value_manager[bucket][position];
-    }
+    // value_type value_at(const size_t bucket, const size_t position) {
+    //     return m_value_manager[bucket][position];
+    // }
 
     //! returns the maximum value of a key that can be stored
     key_type max_key() const { return (-1ULL) >> (64-m_key_width); }
@@ -621,8 +630,8 @@ class separate_chaining_table {
                     const storage_type read_quotient = bucket_keys_it.read(i, key_bitwidth);
                     const key_type read_key = m_hash.inv_map(read_quotient, bucket, m_buckets);
                     DDCHECK_EQ(read_key, m_plainkeys[bucket][i]);
-                    // tmp_map[read_key] =  std::move(m_value_manager[bucket][i]); //TODO: use find_or_insert to speed up!
-                    tmp_map.find_or_insert(read_key, std::move(m_value_manager[bucket][i]));
+                    //tmp_map.find_or_insert(read_key, std::move(m_value_manager[bucket][i]));
+                    tmp_map.find_or_insert(read_key, std::move(m_value_manager[bucket].read(i, value_width())));
                 }
                 clear(bucket);
             }
@@ -837,7 +846,7 @@ class separate_chaining_table {
             if(m_resize_strategy.needs_resize(bucket_size, bucket)) {
                 const size_t newsize = m_resize_strategy.size_after_increment(bucket_size, bucket);
                 bucket_keys.resize(bucket_size-1, newsize, key_bitwidth);
-                bucket_values.resize(bucket_size-1, newsize);
+                bucket_values.resize(bucket_size-1, newsize, value_width());
             }
         }
         DDCHECK_LE(key, max_key());
@@ -850,13 +859,17 @@ class separate_chaining_table {
         bucket_keys.write(bucket_size-1, quotient, key_bitwidth);
         DDCHECK_EQ(m_hash.inv_map(bucket_keys.read(bucket_size-1, key_bitwidth), bucket, m_buckets), key);
 
-        bucket_values.write(bucket_size-1, std::move(value));
+        bucket_values.write(bucket_size-1, std::move(value), value_width());
         return { *this, bucket, static_cast<size_t>(bucket_size-1) };
     }
 
+    void write_value(const size_t bucket, const size_t position, const size_t value) {
+        DCHECK_LE(value, (-1ULL)>>(64-value_width()));
+        m_value_manager[bucket].write(position, value, value_width());
+    }
 
-    value_type& operator[](const key_type& key) {
-        return find_or_insert(key, value_type()).value_ref();
+    navigator operator[](const key_type& key) {
+        return find_or_insert(key, value_type());
     }
 
     ~separate_chaining_table() { clear(); }
@@ -889,10 +902,11 @@ class separate_chaining_table {
         DDCHECK_GT(key_bitwidth, 0);
         DDCHECK_LE(key_bitwidth, key_width());
 
-        for(size_t i = position+1; i < bucket_size; ++i) {
+        for(size_t i = position+1; i < bucket_size; ++i) { //TODO: use 64-bit wordpacking!
             bucket_keys.write(i-1, bucket_keys.read(i, key_bitwidth), key_bitwidth);
             ON_DEBUG(bucket_plainkeys[i-1] = bucket_plainkeys[i];)
-            bucket_values.write(i-1, std::move(bucket_values[i]));
+            bucket_values.write(i-1, bucket_values.read(i, value_width()), value_width());
+            // bucket_values.write(i-1, std::move(bucket_values[i]));
         }
         DDCHECK_GT(bucket_size, 0);
         --bucket_size;
@@ -947,15 +961,15 @@ class separate_chaining_table {
         os.write(reinterpret_cast<const char*>(&m_buckets), sizeof(decltype(m_buckets)));
         os.write(reinterpret_cast<const char*>(&m_elements), sizeof(decltype(m_elements)));
         const size_t cbucket_count = bucket_count();
-        const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
+        const uint_fast8_t quotient_width = m_hash.remainder_width(m_buckets);
 
         os.write(reinterpret_cast<const char*>(m_bucketsizes), sizeof(bucketsize_type) * cbucket_count);
 
 
         for(size_t bucket = 0; bucket < cbucket_count; ++bucket) {
             if(m_bucketsizes[bucket] == 0) continue;
-            m_keys[bucket].serialize(os, m_bucketsizes[bucket], key_bitwidth); 
-            m_value_manager[bucket].serialize(os, m_bucketsizes[bucket], key_bitwidth); 
+            m_keys[bucket].serialize(os, m_bucketsizes[bucket], quotient_width); 
+            m_value_manager[bucket].serialize(os, m_bucketsizes[bucket], value_width()); 
             ON_DEBUG(os.write(reinterpret_cast<const char*>(m_plainkeys[bucket]), sizeof(key_type)*m_bucketsizes[bucket]));
         }
     }
@@ -963,6 +977,7 @@ class separate_chaining_table {
         clear();
         m_overflow.deserialize(is);
         decltype(m_buckets) buckets;
+        is.read(reinterpret_cast<char*>(&m_key_width), sizeof(decltype(m_key_width)));
         is.read(reinterpret_cast<char*>(&m_value_width), sizeof(decltype(m_value_width)));
         m_hash = hash_mapping_type(m_key_width);
         is.read(reinterpret_cast<char*>(&buckets), sizeof(decltype(buckets)));
@@ -972,15 +987,15 @@ class separate_chaining_table {
 
         ON_DEBUG(size_t restored_elements = 0;)
         const size_t cbucket_count = bucket_count();
-        const uint_fast8_t key_bitwidth = m_hash.remainder_width(m_buckets);
+        const uint_fast8_t quotient_width = m_hash.remainder_width(m_buckets);
 
         is.read(reinterpret_cast<char*>(m_bucketsizes), sizeof(bucketsize_type) * cbucket_count);
 
 
         for(size_t bucket = 0; bucket < cbucket_count; ++bucket) {
             if(m_bucketsizes[bucket] == 0) continue;
-            m_keys[bucket].deserialize(is, m_bucketsizes[bucket], key_bitwidth); 
-            m_value_manager[bucket].deserialize(is, m_bucketsizes[bucket], key_bitwidth); 
+            m_keys[bucket].deserialize(is, m_bucketsizes[bucket], quotient_width); 
+            m_value_manager[bucket].deserialize(is, m_bucketsizes[bucket], value_width()); 
 #ifndef NDEBUG
             {
                 const auto bucket_size = m_bucketsizes[bucket];
@@ -990,7 +1005,7 @@ class separate_chaining_table {
                 restored_elements += m_bucketsizes[bucket];
                 const key_bucket_type& bucket_keys = m_keys[bucket];
                 for(size_t i = 0; i < bucket_size; ++i) { 
-                    const key_type read_quotient = bucket_keys.read(i, key_bitwidth);
+                    const key_type read_quotient = bucket_keys.read(i, quotient_width);
                     const key_type read_key = m_hash.inv_map(read_quotient, bucket, m_buckets);
                     DDCHECK_EQ(read_key, bucket_plainkeys[i]);
                 }

@@ -90,24 +90,25 @@ void test_map_outlier(T& map) {
 template<class T>
 void test_map_iterator(T& map) {
    const uint64_t max_key = std::min<uint64_t>(std::numeric_limits<uint8_t>::max(), map.max_key());
+   const uint64_t max_value = map.max_value();
    DCHECK_LE(max_key, std::numeric_limits<typename T::value_type>::max());
 
    for(size_t i = 0; i < max_key; ++i) {
-      map[i] = max_key-i;
+      map[i] = (max_key-i) % max_value;
    }
    for(size_t i = 0; i < max_key; ++i) {
-      ASSERT_EQ(map[i], max_key-i);
+      ASSERT_EQ(map[i], (max_key-i) % max_value);
       ASSERT_EQ(map[i], map[i]);
    }
    map.shrink_to_fit();
    for(const auto& el : map) {
-      ASSERT_EQ(el.first, max_key - el.second);
+      ASSERT_EQ(el.second, (max_key - el.first) % max_value);
    }
    for(auto it = map.begin(); it != map.end(); ++it) {
-      ASSERT_EQ(it->first, max_key - it->second);
+      ASSERT_EQ(it->second, (max_key - it->first) % max_value);
    }
    for(auto it = map.rbegin_nav(); it != map.rend_nav(); --it) {
-      ASSERT_EQ(it.key(), max_key - it.value());
+      ASSERT_EQ(it.value(), (max_key - it.key()) % max_value);
    }
 
    const size_t size = map.size();
@@ -121,19 +122,20 @@ void test_map_iterator(T& map) {
 template<class T>
 void test_map_id(T& map) {
    const uint64_t max_key = std::min<uint64_t>(std::numeric_limits<uint16_t>::max(), map.max_key());
+   const uint64_t max_value = map.max_value();
    DCHECK_LE(max_key, std::numeric_limits<typename T::value_type>::max());
 
    for(size_t i = 0; i < max_key; ++i) {
-      map[i] = i;
+      map[i] = i % max_value;
    }
    for(size_t i = 0; i < max_key; ++i) {
-      ASSERT_EQ(map[i], i);
+      ASSERT_EQ(map[i], i % max_value);
       ASSERT_EQ(map[i], map[i]);
    }
    map.shrink_to_fit();
    const size_t size = map.size();
    for(size_t i = 0; i < max_key; ++i) {
-      map[i] = i;
+      map[i] = i % max_value;
    }
    ASSERT_EQ(map.size(), size);
    for(size_t i = 0; i < max_key; ++i) {
@@ -144,18 +146,19 @@ void test_map_id(T& map) {
 template<class T>
 void test_map_reverse(T& map) {
    const uint64_t max_key = std::min<uint64_t>(std::numeric_limits<uint16_t>::max(), map.max_key());
+   const uint64_t max_value = map.max_value();
    DCHECK_LE(max_key, std::numeric_limits<typename T::value_type>::max());
 
    for(size_t i = 0; i < max_key; ++i) {
-      map[max_key-i] = i;
+      map[max_key-i] = i % max_value;
    }
    for(size_t i = 0; i < max_key; ++i) {
-      ASSERT_EQ(map[max_key-i], i);
+      ASSERT_EQ(map[max_key-i], i % max_value);
    }
    const size_t size = map.size();
    //idempotent
    for(size_t i = 0; i < max_key; ++i) {
-      map[max_key-i] = i;
+      map[max_key-i] = i % max_value;
    }
    ASSERT_EQ(map.size(), size);
    //erase
@@ -339,8 +342,10 @@ TEST(map, quotienting) {
    TEST(x, random) { y; test_map_random(map); } \
    TEST(x, random_large) { y; test_map_random_large(map); } 
 
+TEST_MAP_FULL(map_var_var_low,  separate_chaining_map<varwidth_bucket<> COMMA varwidth_bucket<> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix> COMMA arbitrary_resize> map(7,3))
 
 TEST_SMALL_MAP(map_group, group::group_chaining_table<> map(32,32))
+TEST_SMALL_MAP(map_group_low, group::group_chaining_table<> map(7,3))
 //
 TEST_MAP(compact_map_32_8, compact_chaining_map<hash_mapping_adapter<uint32_t COMMA SplitMix> COMMA uint8_t  > map(32,64))
 TEST_MAP(compact_map_8_8, compact_chaining_map<hash_mapping_adapter<uint8_t COMMA SplitMix>  COMMA uint8_t > map(8,64))
@@ -354,6 +359,7 @@ TEST_MAP(compact_map_64, compact_chaining_map<hash_mapping_adapter<uint64_t COMM
 
 TEST_MAP_FULL(map_var_Xor_64_OverMap, separate_chaining_map<varwidth_bucket<> COMMA plain_bucket<uint32_t> COMMA xorshift_hash<> COMMA incremental_resize COMMA map_overflow> map(64))
 TEST_MAP_FULL(map_var_Xor_64_OverArray, separate_chaining_map<varwidth_bucket<> COMMA plain_bucket<uint32_t> COMMA xorshift_hash<> COMMA incremental_resize COMMA array_overflow> map(64))
+
 
 TEST_MAP_FULL(map_var_arb_16,  separate_chaining_map<varwidth_bucket<> COMMA plain_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix> COMMA arbitrary_resize> map)
 TEST_MAP_FULL(map_plain_16,  separate_chaining_map<plain_bucket<uint32_t> COMMA plain_bucket<uint16_t> COMMA hash_mapping_adapter<uint32_t COMMA SplitMix> COMMA incremental_resize> map)
@@ -395,7 +401,7 @@ TEST_SMALL_MAP(map_bucket_plain_16,  bucket_table<plain_bucket<uint32_t> COMMA p
 TEST_SMALL_MAP(map_bucket_var_16,    bucket_table<varwidth_bucket<> COMMA plain_bucket<uint16_t> COMMA incremental_resize> map)
 
 
-TEST_MAP(keysplit_adapter64, keysplit_adapter64<separate_chaining_map<varwidth_bucket<> COMMA plain_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> COMMA separate_chaining_map<plain_bucket<uint64_t> COMMA plain_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> > map)
+// TEST_MAP(keysplit_adapter64, keysplit_adapter64<separate_chaining_map<varwidth_bucket<> COMMA plain_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> COMMA separate_chaining_map<plain_bucket<uint64_t> COMMA plain_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>> > map)
 
 TEST_MAP(keysplit_adapter, keysplit_adapter<separate_chaining_map<varwidth_bucket<> COMMA plain_bucket<uint16_t> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix>>> map)
 

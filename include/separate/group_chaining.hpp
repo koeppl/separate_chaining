@@ -354,7 +354,7 @@ class keyvalue_group {
               for(size_t i = 0; i < m_border_length;++i) {
                 sum += __builtin_popcountll(m_border[i]);
               }
-              DDCHECK_EQ(sum, m_groupsize+1);
+              DDCHECK_EQ(sum, static_cast<size_t>(m_groupsize)+1);
               });
     }
 
@@ -428,7 +428,7 @@ class keyvalue_group {
           for(size_t i = 0; i < m_border_length;++i) {
               sum += __builtin_popcountll(m_border[i]);
           }
-          DDCHECK_EQ(sum, m_groupsize+1);
+          DDCHECK_EQ(sum, static_cast<size_t>(m_groupsize)+1);
       }
       );//ON_DEBUG
     }
@@ -500,7 +500,7 @@ class keyvalue_group {
           for(size_t i = 0; i < m_border_length;++i) {
               sum += __builtin_popcountll(m_border[i]);
           }
-          DDCHECK_EQ(sum, m_groupsize+1);
+          DDCHECK_EQ(sum, static_cast<size_t>(m_groupsize)+1);
       }
       );//ON_DEBUG
     }
@@ -841,6 +841,7 @@ class group_chaining_table {
     private:
 #ifndef NDEBUG
     void clear_bucket(const size_t bucket) { //! empties i-th bucket, only for debug purposes
+        DDCHECK_LT(bucket, bucket_count());
         if(m_plainkeys[bucket] != nullptr) {
             free(m_plainkeys[bucket]);
             m_plainkeys[bucket] = nullptr;
@@ -859,6 +860,7 @@ class group_chaining_table {
         const size_t bucket_offset = group * max_groupsize();
         for(size_t i = 0; i < max_groupsize(); ++i) {
             const size_t bucket = bucket_offset + bucket;
+            if(bucket >= bucket_count()) { break;} //! the number of buckets may not be divisible by the number of groups
             clear_bucket(bucket);
         }
 #endif//NDEBUG
