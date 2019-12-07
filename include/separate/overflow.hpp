@@ -19,7 +19,7 @@ namespace separate_chaining {
         public:
         dummy_overflow(uint_fast8_t, uint_fast8_t) {}
 
-        static constexpr void resize_buckets(size_t) { }
+        static constexpr void resize_buckets(size_t, uint_fast8_t, uint_fast8_t) { }
         static constexpr bool need_consult(size_t) { return false; }
 
         static constexpr size_t size() { return 0; }
@@ -134,7 +134,7 @@ namespace separate_chaining {
             m_values[m_elements] = value;
             return m_elements++;
         }
-        void resize_buckets(size_t bucketcount) {
+        void resize_buckets(size_t bucketcount, uint_fast8_t, uint_fast8_t) {
           m_bucketfull.resize(bucketcount);
         }
 
@@ -249,7 +249,7 @@ namespace separate_chaining {
             DCHECK_EQ(operator[](position), value);
             return position;
         }
-        void resize_buckets(size_t bucketcount) {
+        void resize_buckets(size_t bucketcount, uint_fast8_t, uint_fast8_t) {
           m_map.reserve(bucketcount);
           DCHECK_GE(m_map.bucket_count(), bucketcount); // sets the max. number of elements to the number of buckets in the hash table
           m_bucketfull.resize(bucketcount);

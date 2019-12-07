@@ -215,9 +215,9 @@ class compact_chaining_map {
         , m_hash(m_key_width) 
         , m_overflow(m_key_width, m_value_width)
     {
-        DDCHECK_GT(m_value_width, 1);
+        DDCHECK_GE(m_value_width, 1);
         DDCHECK_LE(m_value_width, sizeof(value_type)*8);
-        DDCHECK_GT(m_key_width, 1);
+        DDCHECK_GE(m_key_width, 1);
         DDCHECK_LE(m_key_width, sizeof(key_type)*8);
     }
 

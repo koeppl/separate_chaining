@@ -364,7 +364,7 @@ class varwidth_bucket {
     void deserialize(std::istream& is, const size_t size, const uint_fast8_t width) {
        ON_DEBUG(is.read(reinterpret_cast<char*>(&m_size), sizeof(decltype(m_size))));
        ON_DEBUG(is.read(reinterpret_cast<char*>(&m_length), sizeof(decltype(m_length))));
-       DCHECK_LE(size, m_length);
+       DDCHECK_LE(size, m_length);
        const size_t read_length = ceil_div<size_t>(size*width, storage_bitwidth);
        DDCHECK_LE(read_length, m_size);
        m_data = reinterpret_cast<internal_type*>  (malloc(sizeof(internal_type)*read_length));
@@ -373,7 +373,7 @@ class varwidth_bucket {
     void serialize(std::ostream& os, const size_t size, const uint_fast8_t width) const {
        ON_DEBUG(os.write(reinterpret_cast<const char*>(&m_size), sizeof(decltype(m_size))));
        ON_DEBUG(os.write(reinterpret_cast<const char*>(&m_length), sizeof(decltype(m_length))));
-       DCHECK_LE(size, m_length);
+       DDCHECK_LE(size, m_length);
        const size_t write_length = ceil_div<size_t>(size*width, storage_bitwidth);
        DDCHECK_LE(write_length, m_size);
        os.write(reinterpret_cast<const char*>(m_data), sizeof(internal_type)*write_length);
@@ -413,7 +413,7 @@ class varwidth_bucket {
 
     void write(const size_t i, const storage_type key, const uint_fast8_t width) {
        DDCHECK_LT(i, m_length);
-        DDCHECK_LT((static_cast<size_t>(i)*width)/storage_bitwidth + ((i)* width) % storage_bitwidth, storage_bitwidth*ceil_div<size_t>(m_size*width, storage_bitwidth) );
+        // DDCHECK_LT((static_cast<size_t>(i)*width)/storage_bitwidth + ((i)* width) % storage_bitwidth, storage_bitwidth*ceil_div<size_t>(m_size*width, storage_bitwidth) );
         DDCHECK_LE(most_significant_bit(key), width);
 
         tdc::tdc_sdsl::bits_impl<>::write_int(reinterpret_cast<uint64_t*>(m_data + (static_cast<size_t>(i)*width)/storage_bitwidth), key, ((i)* width) % storage_bitwidth, width);
@@ -421,7 +421,8 @@ class varwidth_bucket {
     }
 
     storage_type read(size_t i, size_t width) const {
-        DDCHECK_LT((static_cast<size_t>(i)*width)/storage_bitwidth + ((i)* width) % storage_bitwidth, storage_bitwidth*ceil_div<size_t>(m_size*width, storage_bitwidth) );
+       DDCHECK_LT(i, m_length);
+        // DDCHECK_LT((static_cast<size_t>(i)*width)/storage_bitwidth + ((i)* width) % storage_bitwidth, storage_bitwidth*ceil_div<size_t>(m_size*width, storage_bitwidth) );
         return tdc::tdc_sdsl::bits_impl<>::read_int(reinterpret_cast<uint64_t*>(m_data + (static_cast<size_t>(i)*width)/storage_bitwidth), ((i)* width) % storage_bitwidth, width);
     }
 

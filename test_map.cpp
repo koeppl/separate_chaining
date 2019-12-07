@@ -345,7 +345,7 @@ TEST(map, quotienting) {
 TEST_MAP_FULL(map_var_var_low,  separate_chaining_map<varwidth_bucket<> COMMA varwidth_bucket<> COMMA hash_mapping_adapter<uint64_t COMMA SplitMix> COMMA arbitrary_resize> map(7,3))
 
 TEST_SMALL_MAP(map_group, group::group_chaining_table<> map(32,32))
-TEST_SMALL_MAP(map_group_low, group::group_chaining_table<> map(7,3))
+TEST_MAP(map_group_low, group::group_chaining_table<> map(7,3))
 //
 TEST_MAP(compact_map_32_8, compact_chaining_map<hash_mapping_adapter<uint32_t COMMA SplitMix> COMMA uint8_t  > map(32,64))
 TEST_MAP(compact_map_8_8, compact_chaining_map<hash_mapping_adapter<uint8_t COMMA SplitMix>  COMMA uint8_t > map(8,64))
