@@ -17,6 +17,30 @@
 namespace separate_chaining {
 
 
+//! dummy class for supporting hash sets without memory overhead
+class null_value_bucket {
+    bool m_true = true;
+    public:
+    using key_type = bool;
+    using storage_type = bool;
+    bool& operator[](size_t)  {
+        return m_true;
+    }
+    bool read(size_t, size_t) const { return m_true; }
+    const bool& operator[](size_t) const {
+        return m_true;
+    }
+	constexpr void erase(const size_t, const size_t, const uint_fast8_t) {}
+    constexpr void clear() {}
+    constexpr void initialize(size_t,uint_fast8_t) {}
+    constexpr void resize([[maybe_unused]] const size_t oldsize, [[maybe_unused]] const size_t size, [[maybe_unused]] const size_t width) {}
+    null_value_bucket(null_value_bucket&&) {}
+    null_value_bucket() = default;
+    static constexpr void deserialize([[maybe_unused]] std::istream& is, [[maybe_unused]] const size_t length, [[maybe_unused]] const uint_fast8_t width) { }
+
+    static constexpr void serialize([[maybe_unused]] std::ostream& os, [[maybe_unused]] const size_t length, [[maybe_unused]] const uint_fast8_t width) { }
+    static constexpr void write([[maybe_unused]] const size_t i, [[maybe_unused]] const storage_type key, [[maybe_unused]] const uint_fast8_t width = 0) {}
+};
 
 //! dummy class for supporting hash sets without memory overhead
 class value_dummy_manager {
@@ -626,8 +650,8 @@ class separate_chaining_table {
 
         if(bucket_size == 0) {
             bucket_size = 1;
-            bucket_keys.initiate(resize_strategy_type::INITIAL_BUCKET_SIZE, key_width());
-            bucket_values.initiate(resize_strategy_type::INITIAL_BUCKET_SIZE, value_width());
+            bucket_keys.initialize(resize_strategy_type::INITIAL_BUCKET_SIZE, key_width());
+            bucket_values.initialize(resize_strategy_type::INITIAL_BUCKET_SIZE, value_width());
             m_resize_strategy.assign(resize_strategy_type::INITIAL_BUCKET_SIZE, bucket);
             ON_DEBUG(bucket_plainkeys   = reinterpret_cast<key_type*>  (malloc(sizeof(key_type))));
         } else {
@@ -691,7 +715,6 @@ class separate_chaining_table {
         bucketsize_type& bucket_size = m_bucketsizes[bucket];
         key_bucket_type& bucket_keys = m_keys[bucket];
         value_bucket_type& bucket_values = m_value_manager[bucket];
-        ON_DEBUG(key_type*& bucket_plainkeys = m_plainkeys[bucket];)
 
         DDCHECK_LE(bucket_size, bucket_keys.m_length);
 
@@ -699,12 +722,20 @@ class separate_chaining_table {
         DDCHECK_GT(key_bitwidth, 0);
         DDCHECK_LE(key_bitwidth, key_width());
 
-        for(size_t i = position+1; i < bucket_size; ++i) { //TODO: use 64-bit wordpacking!
-            bucket_keys.write(i-1, bucket_keys.read(i, key_bitwidth), key_bitwidth);
-            ON_DEBUG(bucket_plainkeys[i-1] = bucket_plainkeys[i];)
-            bucket_values.write(i-1, bucket_values.read(i, value_width()), value_width());
-            // bucket_values.write(i-1, std::move(bucket_values[i]));
-        }
+		bucket_keys.erase(position, bucket_size, key_bitwidth);
+		bucket_values.erase(position, bucket_size, value_width());
+		ON_DEBUG(
+        	key_type*& bucket_plainkeys = m_plainkeys[bucket];
+			for(size_t i = position+1; i < bucket_size; ++i) { //TODO: use 64-bit wordpacking!
+				bucket_plainkeys[i-1] = bucket_plainkeys[i];
+			})
+
+        // for(size_t i = position+1; i < bucket_size; ++i) { //TODO: use 64-bit wordpacking!
+        //     bucket_keys.write(i-1, bucket_keys.read(i, key_bitwidth), key_bitwidth);
+        //     ON_DEBUG(bucket_plainkeys[i-1] = bucket_plainkeys[i];)
+        //     bucket_values.write(i-1, bucket_values.read(i, value_width()), value_width());
+        //     // bucket_values.write(i-1, std::move(bucket_values[i]));
+        // }
         DDCHECK_GT(bucket_size, 0);
         --bucket_size;
         --m_elements;

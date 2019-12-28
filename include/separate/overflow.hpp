@@ -80,8 +80,8 @@ namespace separate_chaining {
         bool valid_position(const size_t position) const { return position < size(); } //! is position a valid entry of the table?
         
         array_overflow(uint_fast8_t,uint_fast8_t) {
-            m_keys.initiate(m_length, 0);
-            m_values.initiate(m_length, 0);
+            m_keys.initialize(m_length, 0);
+            m_values.initialize(m_length, 0);
         }
 
         static constexpr size_t first_position() { return 0; }
