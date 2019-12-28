@@ -710,14 +710,20 @@ class group_chaining_table {
 
     public:
 
-    size_t bucketgroup(const size_t bucket) const {
-        return bucket / max_groupsize();
+    //! the group to which the bucket with the global ID `bucket_number` belongs
+    size_t bucketgroup(const size_t bucket_number) const {
+        return bucket_number / max_groupsize();
     }
-    size_t rank_in_group(const size_t bucket) const {
-        return bucket % max_groupsize();
+
+    //! the local ID in the respective group of the bucket with the global ID `bucket_number`
+    size_t rank_in_group(const size_t bucket_number) const {
+        return bucket_number % max_groupsize();
     }
-    size_t max_groupsize() const {  //TODO: tweaking parameter!
-        return 64;
+
+    //! the number of buckets a group can contain
+    size_t max_groupsize() const {  
+        return std::max(2, most_significant_bit(max_bucket_size() * bucket_count())>>1 );  //TODO: tweaking parameter!
+        // return 32;
         //return m_key_width; 
     }
 
@@ -1261,6 +1267,7 @@ class group_chaining_table {
             statphase.log("average_bucket_size", static_cast<double>(size()) / bucket_count());
             statphase.log("min_bucket_size", bucket_sizes[0]);
             statphase.log("max_bucket_size", max_bucket_size());
+            statphase.log("max_group_size", max_groupsize());
             statphase.log("capacity", capacity());
     }
 #endif
