@@ -1122,15 +1122,16 @@ class group_chaining_table {
      */
     std::pair<size_t, size_t> locate(const key_type& key) const {
         if(m_buckets == 0) throw std::runtime_error("cannot query empty hash table");
-        if(m_overflow.size() > 0) { //TODO: query only if we have a full bucket!
+
+        const auto [quotient, bucket] = m_hash.map(key, m_buckets);
+        DDCHECK_EQ(m_hash.inv_map(quotient, bucket, m_buckets), key);
+
+		if(m_overflow.need_consult(bucket) && m_overflow.size() > 0) { 
             const size_t position = m_overflow.find(key);
             if(position != (-1ULL)) {
                 return { bucket_count(), position };
             }
         }
-
-        const auto [quotient, bucket] = m_hash.map(key, m_buckets);
-        DDCHECK_EQ(m_hash.inv_map(quotient, bucket, m_buckets), key);
 
         return { bucket, locate(bucket, quotient) };
     }
