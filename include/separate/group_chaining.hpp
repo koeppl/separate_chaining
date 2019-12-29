@@ -87,10 +87,12 @@ class core_group {
 
 
  
-       // for(size_t i = index; i+1 < length; ++i) { //TODO: this can be speed up with word-packing!
-       //     const size_t oldkey = read_(i+1, key_width);
-       //     write_(i, oldkey, key_width);
-       // }
+#if(0) // move element by element
+       for(size_t i = index; i+1 < length; ++i) { 
+           const size_t oldkey = read_(i+1, key_width);
+           write_(i, oldkey, key_width);
+       }
+#endif
 
 #ifndef NDEBUG
       for(size_t i = index; i+1 < length; ++i) {
@@ -302,7 +304,7 @@ class core_group {
        uint8_t offset = (position_from * key_width) % storage_bitwidth;
        const uint64_t* it = reinterpret_cast<uint64_t*>(m_data +  (position_from * key_width)/storage_bitwidth);
 
-       for(size_t i = 0; i < position_to-position_from; ++i) { // TODO
+       for(size_t i = 0; i < position_to-position_from; ++i) { // TODO: could be enhanced with broadword search
             const storage_type read_key = tdc::tdc_sdsl::bits_impl<>::read_int_and_move(it, offset, key_width);
             DDCHECK_EQ(read_key, m_plain_data[i+position_from]);
             if(read_key == key) {

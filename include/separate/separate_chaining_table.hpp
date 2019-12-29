@@ -727,11 +727,11 @@ class separate_chaining_table {
 		bucket_values.erase(position, bucket_size, value_width());
 		ON_DEBUG(
         	key_type*& bucket_plainkeys = m_plainkeys[bucket];
-			for(size_t i = position+1; i < bucket_size; ++i) { //TODO: use 64-bit wordpacking!
+			for(size_t i = position+1; i < bucket_size; ++i) { 
 				bucket_plainkeys[i-1] = bucket_plainkeys[i];
 			})
 
-        // for(size_t i = position+1; i < bucket_size; ++i) { //TODO: use 64-bit wordpacking!
+        // for(size_t i = position+1; i < bucket_size; ++i) { 
         //     bucket_keys.write(i-1, bucket_keys.read(i, key_bitwidth), key_bitwidth);
         //     ON_DEBUG(bucket_plainkeys[i-1] = bucket_plainkeys[i];)
         //     bucket_values.write(i-1, bucket_values.read(i, value_width()), value_width());

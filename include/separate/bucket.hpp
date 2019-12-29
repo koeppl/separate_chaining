@@ -128,7 +128,7 @@ class avx2_bucket {
         return m_data[i];
     }
 
-	void erase(const size_t position, const size_t length, const uint_fast8_t width) { // TODO: this is a naive implementation!
+	void erase(const size_t position, const size_t length, const uint_fast8_t width) { 
        DDCHECK_LE(length, m_length);
        DDCHECK_LT(position, m_length);
 	    for(size_t i = position+1; i < length; ++i) {
@@ -264,7 +264,7 @@ class plain_bucket {
         DDCHECK_LT(i, m_length);
         m_data[i] = key;
     }
-	void erase(const size_t position, const size_t length, [[maybe_unused]] const uint_fast8_t width) { // TODO: this is a naive implementation!
+	void erase(const size_t position, const size_t length, [[maybe_unused]] const uint_fast8_t width) { 
        DDCHECK_LE(length, m_length);
        DDCHECK_LT(position, m_length);
 	    for(size_t i = position+1; i < length; ++i) {
