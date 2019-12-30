@@ -802,7 +802,7 @@ class group_chaining_table {
 
     //! the number of buckets a group can contain
     size_t max_groupsize() const {  
-        return std::max(2, most_significant_bit(max_bucket_size() * bucket_count())>>1 );  //TODO: tweaking parameter!
+        return std::max(2, most_significant_bit(max_bucket_size() * bucket_count())>>2 );  //TODO: tweaking parameter!
         // return 32;
         //return m_key_width; 
     }
@@ -863,7 +863,7 @@ class group_chaining_table {
         return std::min<size_t>(SEPARATE_MAX_BUCKET_SIZE, std::numeric_limits<groupsize_type>::max());
 #else
         // return std::numeric_limits<uint8_t>::max(); //, (separate_chaining::MAX_BUCKET_BYTESIZE*8)/m_width);
-        return 64; // TODO: tweaking parameter!
+        return 128; // TODO: tweaking parameter!
 #endif
     }
 
