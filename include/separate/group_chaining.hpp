@@ -863,7 +863,7 @@ class group_chaining_table {
         return std::min<size_t>(SEPARATE_MAX_BUCKET_SIZE, std::numeric_limits<groupsize_type>::max());
 #else
         // return std::numeric_limits<uint8_t>::max(); //, (separate_chaining::MAX_BUCKET_BYTESIZE*8)/m_width);
-        return 128; // TODO: tweaking parameter!
+        return 64; // TODO: tweaking parameter!
 #endif
     }
 
@@ -1128,7 +1128,7 @@ class group_chaining_table {
         const auto [quotient, bucket] = m_hash.map(key, m_buckets);
         DDCHECK_EQ(m_hash.inv_map(quotient, bucket, m_buckets), key);
 
-		if(m_overflow.need_consult(bucket) && m_overflow.size() > 0) { 
+		if(m_overflow.size() > 0 && m_overflow.need_consult(bucket)) { 
             const size_t position = m_overflow.find(key);
             if(position != (-1ULL)) {
                 return { bucket_count(), position };
@@ -1261,7 +1261,7 @@ class group_chaining_table {
     size_type erase(const size_t bucket, const size_t position) {
         if(position == static_cast<size_t>(-1ULL)) return 0;
         if(m_overflow.size() > 0 && bucket == bucket_count()) {
-            DDCHECK_LT(position, m_overflow.size());
+            DDCHECK_LT(position, m_overflow.capacity());
             m_overflow.erase(position);
             --m_elements;
             return 1;

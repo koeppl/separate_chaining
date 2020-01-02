@@ -704,7 +704,7 @@ class separate_chaining_table {
     size_type erase(const size_t bucket, const size_t position) {
         if(position == static_cast<size_t>(-1ULL)) return 0;
         if(m_overflow.size() > 0 && bucket == bucket_count()) {
-            DDCHECK_LT(position, m_overflow.size());
+            DDCHECK_LT(position, m_overflow.capacity());
             m_overflow.erase(position);
             --m_elements;
             return 1;
