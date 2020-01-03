@@ -338,7 +338,6 @@ class keyvalue_group {
 
     bool empty() const { return m_size == 0; }
 
-    size_t size() const { return m_size; }
     ON_DEBUG(size_t groupsize() const { return m_groupsize;}) //! returns the number of buckets within this group
     size_t bucketsize(size_t i) const {  //! returns the number of elements in the i-th bucket
         if(empty()) { return 0; }
@@ -663,12 +662,7 @@ class group_chaining_table {
 
     //!@see std::vector
     size_t capacity() const {
-        const size_t cgroup_count = group_count();
-        size_t size = 0;
-        for(size_t group = 0; group < cgroup_count;  ++group) {
-            size += m_groups[group].size();
-        }
-        return size;
+        return group_count() * buckets_per_group() * max_bucket_size();
     }
 
 
@@ -835,9 +829,9 @@ class group_chaining_table {
         return m_groups[bucketgroup(bucket)].bucketsize(rank_in_group(bucket));
     }
 
-    size_t group_size(size_type n) const {
-        return m_groups[n].size();
-    }
+    // size_t group_size(size_type n) const {
+    //     return m_groups[n].size();
+    // }
 
     group_chaining_table(size_t key_width = sizeof(key_type)*8, size_t value_width = sizeof(value_type)*8) 
         : m_key_width(key_width)
