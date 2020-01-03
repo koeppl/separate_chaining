@@ -26,12 +26,12 @@ int main() {
 	kvgroup.initialize(groups, 64, 64);
 
 	for(size_t i = 0; i < 1000; ++i) {
-		kvgroup.push_back(rand() % groups, rand(), 64, rand(), 64);
+		kvgroup.push_back(groups, rand() % groups, rand(), 64, rand(), 64);
 	}
 	kvgroup.clear();
 	kvgroup.initialize(groups, 32, 32);
 	for(size_t i = 0; i < 1000; ++i) {
-		kvgroup.push_back(i % groups, i, 32, i, 32);
+		kvgroup.push_back(groups, i % groups, i, 32, i, 32);
 	}
 	for(size_t i = 0; i < 1000; ++i) {
 		DCHECK_EQ(kvgroup.read(i % groups, i/groups, 32, 32).first, i);
@@ -61,11 +61,11 @@ int main() {
 	    const value_type value = random_int<value_type>(1ULL<<value_width);
 	    maps[group_index][key] = value;
 	    DCHECK(kvgroup.initialized());
-	    kvgroup.push_back(group_index, key, key_width, value, value_width);
+	    kvgroup.push_back(groups, group_index, key, key_width, value, value_width);
 	    if(rand() % 2) {
 	       maps[group_index].erase(maps[group_index].find(key));
 	       const size_t index= kvgroup.find(group_index, key, key_width);
-	       kvgroup.erase(group_index, index, key_width, value_width);
+	       kvgroup.erase(groups, group_index, index, key_width, value_width);
 	    }
 
 	    for(size_t group_index_it = 0; group_index_it < groups; ++group_index_it) {

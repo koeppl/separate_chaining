@@ -193,41 +193,6 @@ class core_group {
 		   }
 		   tdc::tdc_sdsl::bits_impl<>::write_int(read_it, key, read_offset, key_width);
 	   }
-	   // for(size_t i = 0; i < newblocksize; ++i) {
-		//    DDCHECK_EQ(dummy_data[i], m_data[i]);
-	   // }
-	   // write_(index, key, key_width);
-	   // }
-
-			   // delete [] dummy_data;
-
-
-       // const uint8_t offset = (index * key_width) % storage_bitwidth;
-       // uint64_t* it = reinterpret_cast<uint64_t*>(m_data +  (index* key_width)/storage_bitwidth);
-       // DDCHECK_LT(offset+key_width, 64);
-       //
-       // uint64_t& current_block = *it;
-       // const uint_fast8_t current_offset = std::min(offset+key_width, 64);
-       // uint64_t overflow = current_block >> (64-key_width);
-       // current_block = (current_block & (-1ULL>>(64-current_offset-key_width))) |
-       //      ((current_block << key_width) & (-1ULL<<(current_offset)));
-       //      current_block |= key << offset;
-       //  if(current_offset == 64) {
-       //      const uint_fast8_t remaining_key_length = offset+key_width-64; // how many bits of the key we have to copy
-       //      const uint64_t new_overflow = it[block] >> (64-key_width);
-       //
-       //      const uint64_t upper_bits = it[1] >> (64-remaining_bits_length);
-       //      it[1] 
-       //      const size_t upper_bits = it[1] & (-1ULL)>>(upper_bits_length);
-       //      overflow |= upper_bits << upper_bits_length;
-       //  }
-       //
-       // for(size_t block = 2; block < ceil_div<size_t>(length-index, 64); ++block) { //! for each 64-bit block
-       //     const uint64_t new_overflow = it[block] >> (64-key_width);
-       //     it[block] <<= key_width;
-       //     it[block] |= overflow;
-       //     overflow = new_overflow;
-       // }
 #ifndef NDEBUG
        for(size_t i = 0; i < length; ++i) {
            DDCHECK_EQ(m_plain_data[i], read(i, key_width));
@@ -348,7 +313,7 @@ class core_group {
  * `internal_t` is a tradeoff between the number of mallocs and unused space, as it defines the block size in which elements are stored, 
  * i.e., its memory consuption is quantisized by this type's byte size
 **/
-template<class internal_t = uint64_t>
+template<class internal_t = uint8_t>
 class keyvalue_group {
     public:
     using internal_type = internal_t;
@@ -357,15 +322,15 @@ class keyvalue_group {
     using core_group_type = core_group<internal_t>;
     static constexpr uint_fast8_t internal_bitwidth = sizeof(internal_type)*8;
     ON_DEBUG(size_t m_border_length;)
-    groupsize_type m_size = 0; // number of elements in this group
 
     private:
+    groupsize_type m_size = 0; // number of elements in this group
     core_group_type m_keys; //! bucket for keys
     core_group_type m_values; //! bucket for values
     internal_type* m_border = nullptr; //! bit vector marking the borders, stores a 1 for each m_groupsize and a zero for each m_size
     ON_DEBUG(std::vector<size_t> m_border_array;)
-    using group_index_type = uint16_t;
-    group_index_type m_groupsize = 0; // m_groupsize + m_size  = bit vector length of m_border
+    using group_index_type = uint16_t; //! type for addressing the `i`-th bucket in a group
+    ON_DEBUG(group_index_type m_groupsize = 0;) // m_groupsize + m_size  = bit vector length of m_border
 
 
     public:
@@ -373,26 +338,8 @@ class keyvalue_group {
 
     bool empty() const { return m_size == 0; }
 
-    // void deserialize(std::istream& is, const size_t size, const uint_fast8_t key_width, const uint_fast8_t valuewidth) {
-    //    ON_DEBUG(is.read(reinterpret_cast<char*>(&m_length), sizeof(decltype(m_length))));
-    //    DDCHECK_LE(size, m_length);
-    //    const size_t read_length = ceil_div<size_t>(size*width, storage_bitwidth);
-    //    m_data = reinterpret_cast<internal_type*>  (malloc(sizeof(internal_type)*read_length));
-    //    is.read(reinterpret_cast<char*>(m_data), sizeof(internal_type)*read_length);
-    // }
-    // void serialize(std::ostream& os, const size_t size, const uint_fast8_t width) const {
-    //    ON_DEBUG(os.write(reinterpret_cast<const char*>(&m_length), sizeof(decltype(m_length))));
-    //    DDCHECK_LE(size, m_length);
-    //    const size_t write_length = ceil_div<size_t>(size*width, storage_bitwidth);
-    //    os.write(reinterpret_cast<const char*>(m_data), sizeof(internal_type)*write_length);
-    // }
-    // static constexpr size_t size_in_bytes(const size_t size, const size_t width = 0) {
-    //    ON_DEBUG(return size*sizeof(internal_type) + sizeof(m_length));
-    //    const size_t length = ceil_div<size_t>(size*width, storage_bitwidth);
-    //    return length*sizeof(internal_type);
-    // }
     size_t size() const { return m_size; }
-    size_t groupsize() const { return m_groupsize;} //! returns the number of buckets within this group
+    ON_DEBUG(size_t groupsize() const { return m_groupsize;}) //! returns the number of buckets within this group
     size_t bucketsize(size_t i) const {  //! returns the number of elements in the i-th bucket
         if(empty()) { return 0; }
         const size_t prev_position = (i == 0) ? 0 : find_group_position(i-1) - (i-1);
@@ -421,7 +368,7 @@ class keyvalue_group {
        m_size = 0;
 
        DDCHECK_LT(groupsize, std::numeric_limits<decltype(m_groupsize)>::max());
-       m_groupsize = groupsize;
+       ON_DEBUG(m_groupsize = groupsize);
        m_border = reinterpret_cast<internal_type*>  (malloc(sizeof(internal_type)* ceil_div<size_t>(groupsize+1, internal_bitwidth) ));
        memset(m_border, static_cast<char>(-1ULL), ceil_div<size_t>(groupsize+1, 8)); // groupsize+1 as we use the last '1' as a dummy border
        internal_type& last_border = m_border[ceil_div<size_t>(groupsize+1, internal_bitwidth)-1];
@@ -435,7 +382,7 @@ class keyvalue_group {
               for(size_t i = 0; i < m_border_length;++i) {
                 sum += __builtin_popcountll(m_border[i]);
               }
-              DDCHECK_EQ(sum, static_cast<size_t>(m_groupsize)+1);
+              DDCHECK_EQ(sum, static_cast<size_t>(groupsize)+1);
               });
     }
 
@@ -466,15 +413,15 @@ class keyvalue_group {
       }
     }
 
-    void push_back(const group_index_type groupindex, const storage_type key, const uint_fast8_t key_width, const storage_type value, const uint_fast8_t valuewidth) {
+    void push_back(const group_index_type buckets_per_group, const group_index_type groupindex, const storage_type key, const uint_fast8_t key_width, const storage_type value, const uint_fast8_t valuewidth) {
       DDCHECK_LT(m_size, std::numeric_limits<groupsize_type>::max());
 
       const size_t group_ending = find_group_position(groupindex);
       m_keys.insert(group_ending-groupindex, key, key_width, m_size);
       m_values.insert(group_ending-groupindex, value, valuewidth, m_size);
       ++m_size;
-      const size_t new_border_size = ceil_div<size_t>(m_size + 1 + m_groupsize, internal_bitwidth);
-      if(new_border_size > ceil_div<size_t>(m_size + m_groupsize, internal_bitwidth)) {
+      const size_t new_border_size = ceil_div<size_t>(m_size + 1 + buckets_per_group, internal_bitwidth);
+      if(new_border_size > ceil_div<size_t>(m_size + buckets_per_group, internal_bitwidth)) {
           m_border = reinterpret_cast<internal_type*>(realloc(m_border, sizeof(internal_type) * new_border_size));
           m_border[new_border_size-1] = 0;
           ON_DEBUG(++m_border_length;)
@@ -509,12 +456,12 @@ class keyvalue_group {
           for(size_t i = 0; i < m_border_length;++i) {
               sum += __builtin_popcountll(m_border[i]);
           }
-          DDCHECK_EQ(sum, static_cast<size_t>(m_groupsize)+1);
+          DDCHECK_EQ(sum, static_cast<size_t>(buckets_per_group)+1);
       }
       );//ON_DEBUG
     }
 
-    void erase(size_t groupindex, size_t position, uint_fast8_t key_width, uint_fast8_t valuewidth) {
+    void erase(const group_index_type buckets_per_group, size_t groupindex, size_t position, uint_fast8_t key_width, uint_fast8_t valuewidth) {
       const size_t prev_groupindex = groupindex == 0 ? 0 : groupindex-1; // number of ones we need to subtract to obtain the array_index from group_begin
       const size_t group_begin = groupindex == 0 ? 0 : find_group_position(prev_groupindex);
       const size_t array_index = group_begin - prev_groupindex + position;
@@ -525,7 +472,7 @@ class keyvalue_group {
       m_values.erase(array_index, valuewidth, m_size);
 
       // TODO: shrink size
-      const size_t border_size = ceil_div<size_t>(m_size + 1 + m_groupsize, internal_bitwidth);
+      const size_t border_size = ceil_div<size_t>(m_size + 1 + buckets_per_group, internal_bitwidth);
       DDCHECK_EQ(border_size, m_border_length);
     
       const size_t group_border_current = group_ending/internal_bitwidth;
@@ -560,7 +507,7 @@ class keyvalue_group {
       }
 
       --m_size;
-      const size_t new_border_size = ceil_div<size_t>(m_size + 1 + m_groupsize, internal_bitwidth);
+      const size_t new_border_size = ceil_div<size_t>(m_size + 1 + buckets_per_group, internal_bitwidth);
       if(new_border_size < border_size) {
           m_border = reinterpret_cast<internal_type*>(realloc(m_border, sizeof(internal_type) * new_border_size));
           ON_DEBUG(--m_border_length;)
@@ -744,7 +691,8 @@ class group_chaining_table {
     void clear(const size_t group_i) { //! empties i-th group_i
 #ifndef NDEBUG
         const size_t groupsize = m_groups[group_i].groupsize();
-        const size_t bucket_offset = group_i * max_groupsize();
+		DDCHECK_EQ(m_groups[group_i].groupsize(), buckets_per_group());
+        const size_t bucket_offset = group_i * buckets_per_group();
         for(size_t bucket_i = 0; bucket_i < groupsize; ++bucket_i) { //! local bucket ID
             const size_t bucket_number = bucket_offset + bucket_i; //! global bucket ID
             if(bucket_number >= bucket_count()) { break;} //! the number of buckets may not be divisible by the number of groups
@@ -792,16 +740,16 @@ class group_chaining_table {
 
     //! the group to which the bucket with the global ID `bucket_number` belongs
     size_t bucketgroup(const size_t bucket_number) const {
-        return bucket_number / max_groupsize();
+        return bucket_number / buckets_per_group();
     }
 
     //! the local ID in the respective group of the bucket with the global ID `bucket_number`
     size_t rank_in_group(const size_t bucket_number) const {
-        return bucket_number % max_groupsize();
+        return bucket_number % buckets_per_group();
     }
 
     //! the number of buckets a group can contain
-    size_t max_groupsize() const {  
+    size_t buckets_per_group() const {  
         return std::max(2, most_significant_bit(max_bucket_size() * bucket_count())>>2 );  //TODO: tweaking parameter!
         // return 32;
         //return m_key_width; 
@@ -901,7 +849,7 @@ class group_chaining_table {
         DDCHECK_LE(m_value_width, sizeof(value_type)*8);
         DDCHECK_GE(m_key_width, 1);
         DDCHECK_LE(m_key_width, sizeof(key_type)*8);
-        DCHECK_LT(max_groupsize()*max_bucket_size(), std::numeric_limits<groupsize_type>::max());
+        DCHECK_LT(buckets_per_group()*max_bucket_size(), std::numeric_limits<groupsize_type>::max());
     }
 
 
@@ -942,11 +890,12 @@ class group_chaining_table {
                 for(size_t group_i = 0; group_i < cgroup_count; ++group_i) {
                     const keyvalue_group_type& group_it = m_groups[group_i];
                     if(group_it.empty()) continue;
-                    const size_t groupsize = m_groups[group_i].groupsize();
+                    const size_t groupsize = buckets_per_group();
+					DDCHECK_EQ(m_groups[group_i].groupsize(), buckets_per_group());
                     for(size_t bucket_i = 0; bucket_i < groupsize; ++bucket_i) { //! the bucket index within the group
                         const size_t bucketsize =  group_it.bucketsize(bucket_i);
                         if(bucketsize == 0) { continue; }
-                        const size_t bucket_number = bucket_i+group_i*max_groupsize(); //! the global bucket index
+                        const size_t bucket_number = bucket_i+group_i*buckets_per_group(); //! the global bucket index
                         DDCHECK_EQ(rank_in_group(bucket_number), bucket_i);
                         DDCHECK_LT(bucket_number, bucket_count());
                         DDCHECK_EQ(bucketgroup(bucket_number), group_i);
@@ -965,20 +914,6 @@ class group_chaining_table {
                 ON_DEBUG(elements += m_overflow.size();)
                 DDCHECK_EQ(elements, m_elements);
             }
-
-
-            // for(size_t bucket = 0; bucket < cbucket_count; ++bucket) {
-            //     const keyvalue_group_type& group = m_groups[bucketgroup(bucket)];
-            //     if(group.empty()) continue;
-            //     for(size_t i = 0; i < group.groupsize(); ++i) {
-            //         const auto [read_quotient, read_value] = group.read(rank_in_group(bucket), i, quotient_width, m_value_width);
-            //         const key_type read_key = m_hash.inv_map(read_quotient, bucket, m_buckets);
-            //         DDCHECK_EQ(read_value, m_plainvalues[bucket][i]);
-            //         DDCHECK_EQ(read_key, m_plainkeys[bucket][i]);
-            //         tmp_map.find_or_insert(read_key, read_value);
-            //     }
-            //     // clear(bucket); //TODO: make call for clear a group
-            // }
 
 
             {
@@ -1024,39 +959,9 @@ class group_chaining_table {
         if(m_overflow.size() > 0) return { *this, cbucket_count, 0 };
         return end();
     }
-    // const const_iterator cbegin() const {
-    //     const size_t cbucket_count = bucket_count();
-    //     for(size_t bucket = 0; bucket < cbucket_count;  ++bucket) {
-    //         if(m_bucketsizes[bucket] > 0) {
-    //             return { *this, bucket, 0 };
-    //         }
-    //     }
-    //     if(m_overflow.size() > 0) return { *this, cbucket_count, 0 };
-    //     return cend();
-    // }
-    // const navigator begin_nav() {
-    //     const size_t cbucket_count = bucket_count();
-    //     for(size_t bucket = 0; bucket < cbucket_count;  ++bucket) {
-    //         if(m_bucketsizes[bucket] > 0) {
-    //             return { *this, bucket, 0 };
-    //         }
-    //     }
-    //     if(m_overflow.size() > 0) return { *this, cbucket_count, 0 };
-    //     return end_nav();
-    // }
     const navigator end_nav() {
         return { *this, -1ULL, -1ULL };
     }
-    // const const_navigator cbegin_nav() const {
-    //     const size_t cbucket_count = bucket_count();
-    //     for(size_t bucket = 0; bucket < cbucket_count;  ++bucket) {
-    //         if(m_bucketsizes[bucket] > 0) {
-    //             return { *this, bucket, 0 };
-    //         }
-    //     }
-    //     if(m_overflow.size() > 0) return { *this, cbucket_count, 0 };
-    //     return cend_nav();
-    // }
     const const_navigator cend_nav() const {
         return { *this, -1ULL, -1ULL };
     }
@@ -1117,7 +1022,8 @@ class group_chaining_table {
     }
 
     public:
-    /*
+
+    /**
      * Returns the location of a key if it is stored in the table.
      * The location is a pair consisting of the bucket and the position within the bucket.
      * If the key is not in the table, the location is the bucket where the key should be hashed into, and the position is -1.
@@ -1150,7 +1056,6 @@ class group_chaining_table {
         const groupsize_type bucket_size = group.bucketsize(rank_in_group(bucket));
         const size_t position = locate(bucket, quotient);
 
-        // value_bucket_type& bucket_values = m_value_manager[bucket];
         if(position != static_cast<size_t>(-1ULL)) {
             DDCHECK_LT(position, bucket_size);
             return { *this, bucket, position };
@@ -1187,13 +1092,14 @@ class group_chaining_table {
         DDCHECK_GT(quotient_width, 0);
         DDCHECK_LE(quotient_width, key_width());
 
-        if(!group.initialized()) { group.initialize(max_groupsize(), quotient_width, value_width());}
+        if(!group.initialized()) { group.initialize(buckets_per_group(), quotient_width, value_width());}
 
 #ifndef NDEBUG
         {
             size_t elements = 0;
             for(size_t group_i = 0; group_i < group_count(); ++group_i) {
                 const keyvalue_group_type& group_it = m_groups[group_i];
+				DDCHECK_EQ(group_it.groupsize(), buckets_per_group());
                 for(size_t bucket_i = 0; bucket_i < group_it.groupsize(); ++bucket_i) {
                     elements += group_it.bucketsize(bucket_i);
                 }
@@ -1224,7 +1130,7 @@ class group_chaining_table {
 
         DDCHECK_LE(quotient_width, sizeof(key_type)*8);
 
-        group.push_back(rank_in_group(bucket), quotient, quotient_width, value, value_width());
+        group.push_back(buckets_per_group(), rank_in_group(bucket), quotient, quotient_width, value, value_width());
         DDCHECK_EQ(m_bucketsizes[bucket], group.bucketsize(rank_in_group(bucket)));
 
         DDCHECK_EQ(m_hash.inv_map(group.read_key(rank_in_group(bucket), bucket_size, quotient_width), bucket, m_buckets), key);
@@ -1295,7 +1201,7 @@ class group_chaining_table {
         }
 #endif//NDEBUG
 
-        group.erase(rank_in_group(bucket), position, quotient_width, value_width());
+        group.erase(buckets_per_group(), rank_in_group(bucket), position, quotient_width, value_width());
 
 #ifndef NDEBUG
         DDCHECK_EQ(bucket_size, group.bucketsize(rank_in_group(bucket)));
@@ -1340,6 +1246,7 @@ class group_chaining_table {
             statphase.log("deviation_bucket_size", deviation);
             statphase.log("key_width", m_key_width);
             statphase.log("value_width", m_value_width);
+			statphase.log("quotient width", m_hash.remainder_width(m_buckets));
             statphase.log("median_bucket_size", 
                     (bucket_sizes.size() % 2 != 0)
                     ? static_cast<double>(bucket_sizes[bucket_sizes.size()/2])
@@ -1348,7 +1255,7 @@ class group_chaining_table {
             statphase.log("average_bucket_size", static_cast<double>(size()) / bucket_count());
             statphase.log("min_bucket_size", bucket_sizes[0]);
             statphase.log("max_bucket_size", max_bucket_size());
-            statphase.log("max_group_size", max_groupsize());
+            statphase.log("buckets_per_group", buckets_per_group());
             statphase.log("capacity", capacity());
     }
 #endif

@@ -395,6 +395,7 @@ class separate_chaining_table {
             statphase.log("deviation_bucket_size", deviation);
             statphase.log("key_width", m_key_width);
             statphase.log("value_width", m_value_width);
+			statphase.log("quotient width", m_hash.remainder_width(m_buckets));
             statphase.log("median_bucket_size", 
                     (bucket_sizes.size() % 2 != 0)
                     ? static_cast<double>(bucket_sizes[bucket_sizes.size()/2])
