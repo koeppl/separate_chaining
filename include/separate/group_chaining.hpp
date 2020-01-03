@@ -371,7 +371,9 @@ class keyvalue_group {
        m_border = reinterpret_cast<internal_type*>  (malloc(sizeof(internal_type)* ceil_div<size_t>(groupsize+1, internal_bitwidth) ));
        memset(m_border, static_cast<char>(-1ULL), ceil_div<size_t>(groupsize+1, 8)); // groupsize+1 as we use the last '1' as a dummy border
        internal_type& last_border = m_border[ceil_div<size_t>(groupsize+1, internal_bitwidth)-1];
-       last_border = static_cast<internal_type>(-1ULL)>>(internal_bitwidth - ((groupsize+1) % internal_bitwidth));
+	   if((groupsize+1) % internal_bitwidth != 0) {
+		   last_border = static_cast<internal_type>(-1ULL)>>(internal_bitwidth - ((groupsize+1) % internal_bitwidth));
+	   }
 
       ON_DEBUG(m_border_length = ceil_div<size_t>(groupsize+1, internal_bitwidth);)
       ON_DEBUG( 
@@ -744,7 +746,8 @@ class group_chaining_table {
 
     //! the number of buckets a group can contain
     size_t buckets_per_group() const {  
-        return std::max(2, most_significant_bit(max_bucket_size() * bucket_count())>>2 );  //TODO: tweaking parameter!
+        return std::max(2, most_significant_bit(bucket_count()) );  //TODO: tweaking parameter!
+        //return std::max(2, most_significant_bit(max_bucket_size() * bucket_count())>>2 );  //TODO: tweaking parameter!
         // return 32;
         //return m_key_width; 
     }
@@ -1062,8 +1065,7 @@ class group_chaining_table {
         }
 
 
-        if(bucket_size == max_bucket_size()) {
-            if(m_overflow.size() < m_overflow.capacity()) {
+        if(bucket_size == max_bucket_size() && m_overflow.size() < m_overflow.capacity()) {
                 const size_t overflow_position = m_overflow.insert(bucket, key, std::move(value));
                 if(overflow_position != static_cast<size_t>(-1ULL)) { // could successfully insert element into overflow table
                     ++m_elements;
@@ -1071,7 +1073,8 @@ class group_chaining_table {
                     DDCHECK_EQ(m_overflow[m_overflow.find(key)], value);
                     return { *this, bucket_count(), overflow_position };
                 }
-            }
+       	}
+		if(bucket_size == max_bucket_size()) { // || bucket_count()*4 == m_elements) {
             // if(m_elements*separate_chaining::FAIL_PERCENTAGE < max_size()) {
             //     throw std::runtime_error("The chosen hash function is bad!");
             // }
@@ -1093,6 +1096,7 @@ class group_chaining_table {
             size_t elements = 0;
             for(size_t group_i = 0; group_i < group_count(); ++group_i) {
                 const keyvalue_group_type& group_it = m_groups[group_i];
+				if(group_it.empty()) { continue; }
 				DDCHECK_EQ(group_it.groupsize(), buckets_per_group());
                 for(size_t bucket_i = 0; bucket_i < group_it.groupsize(); ++bucket_i) {
                     elements += group_it.bucketsize(bucket_i);
