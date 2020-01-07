@@ -18,8 +18,8 @@ namespace group {
 **/
 template<class internal_t>
 class core_group {
-    using storage_type = size_t; //TODO: separate storage_type and key_type
-    using internal_type = internal_t;
+    using storage_type = size_t; //! type representing a stored value
+    using internal_type = internal_t; //! entry type of the array storing the values
     static constexpr uint_fast8_t storage_bitwidth = sizeof(internal_type)*8;
 
     private:
@@ -329,7 +329,7 @@ class keyvalue_group {
     core_group_type m_values; //! bucket for values
     internal_type* m_border = nullptr; //! bit vector marking the borders, stores a 1 for each m_groupsize and a zero for each m_size
     ON_DEBUG(std::vector<size_t> m_border_array;)
-    using group_index_type = uint16_t; //! type for addressing the `i`-th bucket in a group
+    using group_index_type = uint8_t; //! type for addressing the `i`-th bucket in a group
     ON_DEBUG(group_index_type m_groupsize = 0;) // m_groupsize + m_size  = bit vector length of m_border
 
 
@@ -337,6 +337,8 @@ class keyvalue_group {
     keyvalue_group() = default;
 
     bool empty() const { return m_size == 0; }
+
+    size_t size() const { return m_size;} //! returns the number of elements stored in the group
 
     ON_DEBUG(size_t groupsize() const { return m_groupsize;}) //! returns the number of buckets within this group
     size_t bucketsize(size_t i) const {  //! returns the number of elements in the i-th bucket
@@ -637,6 +639,7 @@ class group_chaining_table {
     uint_fast8_t m_value_width;
     hash_mapping_type m_hash; //! hash function
     mutable overflow_type m_overflow; //TODO: cht_overflow has non-const operations
+    uint_fast8_t m_buckets_per_group;
 
     ON_DEBUG(key_type** m_plainkeys = nullptr;) //!bucket for keys in plain format for debugging purposes
     ON_DEBUG(value_type** m_plainvalues = nullptr;) //!bucket for values in plain format for debugging purposes
@@ -652,6 +655,7 @@ class group_chaining_table {
 
         std::swap(m_key_width, other.m_key_width);
         std::swap(m_value_width, other.m_value_width);
+        std::swap(m_buckets_per_group, other.m_buckets_per_group);
         std::swap(m_groups, other.m_groups);
         std::swap(m_buckets, other.m_buckets);
         std::swap(m_hash, other.m_hash);
@@ -664,7 +668,7 @@ class group_chaining_table {
 
     //!@see std::vector
     size_t capacity() const {
-        return group_count() * buckets_per_group() * max_bucket_size();
+        return group_count() * max_group_size();
     }
 
 
@@ -746,8 +750,9 @@ class group_chaining_table {
 
     //! the number of buckets a group can contain
     size_t buckets_per_group() const {  
-        return std::max(2, most_significant_bit(bucket_count()) );  //TODO: tweaking parameter!
-        //return std::max(2, most_significant_bit(max_bucket_size() * bucket_count())>>2 );  //TODO: tweaking parameter!
+		return m_buckets_per_group;
+        //return std::max(2, most_significant_bit(bucket_count()) );  //TODO: tweaking parameter!
+        // return std::max(2, most_significant_bit(max_bucket_size() * bucket_count()) );  //TODO: tweaking parameter!
         // return 32;
         //return m_key_width; 
     }
@@ -800,16 +805,11 @@ class group_chaining_table {
 
     //! the maximum number of elements that can be stored with the current number of buckets.
     size_type max_size() const noexcept {
-        return max_bucket_size() * bucket_count();
+        return capacity();
     }
 
-    static constexpr size_t max_bucket_size() { //! largest number of elements a bucket can contain before enlarging the hash table
-#ifdef SEPARATE_MAX_BUCKET_SIZE
-        return std::min<size_t>(SEPARATE_MAX_BUCKET_SIZE, std::numeric_limits<groupsize_type>::max());
-#else
-        // return std::numeric_limits<uint8_t>::max(); //, (separate_chaining::MAX_BUCKET_BYTESIZE*8)/m_width);
-        return 64; // TODO: tweaking parameter!
-#endif
+    static constexpr size_t max_group_size() { //! largest number of elements a bucket can contain before enlarging the hash table
+        return 255; // TODO: tweaking parameter!
     }
 
     //! @see std::unordered_map
@@ -841,12 +841,13 @@ class group_chaining_table {
         , m_value_width(value_width)
         , m_hash(m_key_width) 
         , m_overflow(m_key_width, m_value_width)
+		, m_buckets_per_group(3)
     {
         DDCHECK_GE(m_value_width, 1);
         DDCHECK_LE(m_value_width, sizeof(value_type)*8);
         DDCHECK_GE(m_key_width, 1);
         DDCHECK_LE(m_key_width, sizeof(key_type)*8);
-        DCHECK_LT(buckets_per_group()*max_bucket_size(), std::numeric_limits<groupsize_type>::max());
+        // DCHECK_LT(buckets_per_group()*max_bucket_size(), std::numeric_limits<groupsize_type>::max());
     }
 
 
@@ -871,8 +872,11 @@ class group_chaining_table {
             m_overflow.resize_buckets(new_size, key_width(), value_width());
         } else {
             group_chaining_table tmp_map(m_key_width, m_value_width);
+			tmp_map.m_buckets_per_group = 64; //std::min<size_t>(255, std::max<size_t>(3, size() / (1+bucket_count())));
+			//tmp_map.m_buckets_per_group = std::min<size_t>(255, std::max<size_t>(32, size() / group_count()));
             tmp_map.reserve(new_size);
-#if STATS_ENABLED
+			//tmp_map.m_buckets_per_group = 50; //std::min<size_t>(255, std::max<size_t>(3, size() / group_count()));
+#if STATS_ENABLED && PRINT_STATS
             tdc::StatPhase statphase(std::string("resizing to ") + std::to_string(reserve_bits));
             print_stats(statphase);
 #endif
@@ -1065,7 +1069,8 @@ class group_chaining_table {
         }
 
 
-        if(bucket_size == max_bucket_size() && m_overflow.size() < m_overflow.capacity()) {
+        if(group.size() == max_group_size()) {
+			if(m_overflow.size() < m_overflow.capacity()) { //tweak
                 const size_t overflow_position = m_overflow.insert(bucket, key, std::move(value));
                 if(overflow_position != static_cast<size_t>(-1ULL)) { // could successfully insert element into overflow table
                     ++m_elements;
@@ -1073,14 +1078,10 @@ class group_chaining_table {
                     DDCHECK_EQ(m_overflow[m_overflow.find(key)], value);
                     return { *this, bucket_count(), overflow_position };
                 }
+			} 
+			reserve(1ULL<<(m_buckets+1));
+			return find_or_insert(key, value);
        	}
-		if(bucket_size == max_bucket_size()) { // || bucket_count()*4 == m_elements) {
-            // if(m_elements*separate_chaining::FAIL_PERCENTAGE < max_size()) {
-            //     throw std::runtime_error("The chosen hash function is bad!");
-            // }
-            reserve(1ULL<<(m_buckets+1));
-            return find_or_insert(key, value);
-        }
         ++m_elements;
 
         // key_bucket_type& bucket_keys = m_keys[bucket];
@@ -1224,7 +1225,7 @@ class group_chaining_table {
         return 1;
     }
 
-#if STATS_ENABLED
+#if STATS_ENABLED && PRINT_STATS
     void print_stats(tdc::StatPhase& statphase) {
             statphase.log("class", typeid(class_type).name());
             statphase.log("size", size());
@@ -1233,26 +1234,45 @@ class group_chaining_table {
             statphase.log("bucket_count", bucket_count());
             statphase.log("overflow_size", m_overflow.size());
             statphase.log("overflow_capacity", m_overflow.capacity());
-            double deviation = 0;
-            std::vector<size_t> bucket_sizes(bucket_count());
-            for(size_t i = 0; i < bucket_count(); ++i) {
-                bucket_sizes[i] = bucket_size(i);
-                const double diff = (static_cast<double>(size()/bucket_count()) - bucket_size(i));
-                deviation += diff*diff;
-            }
-            std::sort(bucket_sizes.begin(), bucket_sizes.end());
-            statphase.log("deviation_bucket_size", deviation);
-            statphase.log("key_width", m_key_width);
-            statphase.log("value_width", m_value_width);
-			statphase.log("quotient width", m_hash.remainder_width(m_buckets));
-            statphase.log("median_bucket_size", 
-                    (bucket_sizes.size() % 2 != 0)
-                    ? static_cast<double>(bucket_sizes[bucket_sizes.size()/2])
-                    : static_cast<double>(bucket_sizes[(bucket_sizes.size()-1)/2]+ bucket_sizes[(bucket_sizes.size()/2)])/2
-                    );
-            statphase.log("average_bucket_size", static_cast<double>(size()) / bucket_count());
-            statphase.log("min_bucket_size", bucket_sizes[0]);
-            statphase.log("max_bucket_size", max_bucket_size());
+			statphase.log("width_key", m_key_width);
+			statphase.log("width_value", m_value_width);
+			statphase.log("width_quotient", m_hash.remainder_width(m_buckets));
+            // double deviation = 0;
+			// {
+			// 	std::vector<size_t> bucket_sizes(bucket_count());
+			// 	for(size_t i = 0; i < bucket_count(); ++i) {
+			// 		bucket_sizes[i] = bucket_size(i);
+			// 		const double diff = (static_cast<double>(size()/bucket_count()) - bucket_size(i));
+			// 		deviation += diff*diff;
+			// 	}
+			// 	std::sort(bucket_sizes.begin(), bucket_sizes.end());
+			// 	statphase.log("bucket_deviation_size", deviation);
+			// 	statphase.log("bucket_median_size", 
+			// 			(bucket_sizes.size() % 2 != 0)
+			// 			? static_cast<double>(bucket_sizes[bucket_sizes.size()/2])
+			// 			: static_cast<double>(bucket_sizes[(bucket_sizes.size()-1)/2]+ bucket_sizes[(bucket_sizes.size()/2)])/2
+			// 			);
+			// 	statphase.log("bucket_min_size", bucket_sizes[0]);
+			// 	statphase.log("bucket_max_size", bucket_sizes.back());
+			// }
+			// {
+			// 	std::vector<size_t> group_sizes(group_count());
+			// 	for(size_t i = 0; i < group_count(); ++i) {
+			// 		group_sizes[i] = m_groups[i].size();
+			// 	}
+			// 	std::sort(group_sizes.begin(), group_sizes.end());
+			// 	statphase.log("group_median_size", 
+			// 			(group_sizes.size() % 2 != 0)
+			// 			? static_cast<double>(group_sizes[group_sizes.size()/2])
+			// 			: static_cast<double>(group_sizes[(group_sizes.size()-1)/2]+ group_sizes[(group_sizes.size()/2)])/2
+			// 			);
+			// 	statphase.log("group_min_size", group_sizes[0]);
+			// 	statphase.log("group_max_size", group_sizes.back());
+			// }
+            //
+			statphase.log("group_average_size", static_cast<double>(size()) / group_count());
+            statphase.log("bucket_average_size", static_cast<double>(size()) / bucket_count());
+            statphase.log("group_max_threshold", max_group_size());
             statphase.log("buckets_per_group", buckets_per_group());
             statphase.log("capacity", capacity());
     }

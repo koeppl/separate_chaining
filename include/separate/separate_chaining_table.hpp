@@ -376,7 +376,7 @@ class separate_chaining_table {
         std::swap(m_overflow, other.m_overflow);
     }
 
-#if STATS_ENABLED
+#if STATS_ENABLED && PRINT_STATS
     void print_stats(tdc::StatPhase& statphase) {
             statphase.log("class", typeid(class_type).name());
             statphase.log("size", size());
@@ -384,27 +384,30 @@ class separate_chaining_table {
             statphase.log("bucket_count", bucket_count());
             statphase.log("overflow_size", m_overflow.size());
             statphase.log("overflow_capacity", m_overflow.capacity());
-            double deviation = 0;
-            std::vector<size_t> bucket_sizes(bucket_count());
-            for(size_t i = 0; i < bucket_count(); ++i) {
-                bucket_sizes[i] = bucket_size(i);
-                const double diff = (static_cast<double>(size()/bucket_count()) - bucket_size(i));
-                deviation += diff*diff;
-            }
-            std::sort(bucket_sizes.begin(), bucket_sizes.end());
-            statphase.log("deviation_bucket_size", deviation);
-            statphase.log("key_width", m_key_width);
-            statphase.log("value_width", m_value_width);
-			statphase.log("quotient width", m_hash.remainder_width(m_buckets));
-            statphase.log("median_bucket_size", 
-                    (bucket_sizes.size() % 2 != 0)
-                    ? static_cast<double>(bucket_sizes[bucket_sizes.size()/2])
-                    : static_cast<double>(bucket_sizes[(bucket_sizes.size()-1)/2]+ bucket_sizes[(bucket_sizes.size()/2)])/2
-                    );
-            statphase.log("average_bucket_size", static_cast<double>(size()) / bucket_count());
-            statphase.log("min_bucket_size", bucket_sizes[0]);
-            statphase.log("max_bucket_size", max_bucket_size());
+			{
+            // double deviation = 0;
+            // std::vector<size_t> bucket_sizes(bucket_count());
+            // for(size_t i = 0; i < bucket_count(); ++i) {
+            //     bucket_sizes[i] = bucket_size(i);
+            //     const double diff = (static_cast<double>(size()/bucket_count()) - bucket_size(i));
+            //     deviation += diff*diff;
+            // }
+            // std::sort(bucket_sizes.begin(), bucket_sizes.end());
+            // statphase.log("deviation_bucket_size", deviation);
+            // statphase.log("bucket_median_size", 
+            //         (bucket_sizes.size() % 2 != 0)
+            //         ? static_cast<double>(bucket_sizes[bucket_sizes.size()/2])
+            //         : static_cast<double>(bucket_sizes[(bucket_sizes.size()-1)/2]+ bucket_sizes[(bucket_sizes.size()/2)])/2
+            //         );
+            // statphase.log("bucket_min_size", bucket_sizes[0]);
+            // statphase.log("bucket_max_size", max_bucket_size());
+			}
+
+            statphase.log("bucket_average_size", static_cast<double>(size()) / bucket_count());
             statphase.log("capacity", capacity());
+            statphase.log("width_key", m_key_width);
+            statphase.log("width_value", m_value_width);
+			statphase.log("width_quotient", m_hash.remainder_width(m_buckets));
     }
 #endif
 
@@ -429,7 +432,7 @@ class separate_chaining_table {
         } else {
             separate_chaining_table tmp_map(m_key_width, m_value_width);
             tmp_map.reserve(new_size);
-#if STATS_ENABLED
+#if STATS_ENABLED && PRINT_STATS
             tdc::StatPhase statphase(std::string("resizing to ") + std::to_string(reserve_bits));
             print_stats(statphase);
 #endif
