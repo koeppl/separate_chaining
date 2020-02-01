@@ -110,7 +110,6 @@ The class `bucket_table` wraps a single bucket in a map/set interface.
   - make
   - a C++17 compiler like gcc or clang 
   - gtest (optional) for tests
-  - celero (optional) for benchmarking
 
 ## Outlook
 It is possible to extend this approach for Cuckoo Hashing with multiple hash functions.
