@@ -45,6 +45,41 @@ class core_group {
         )
         ON_DEBUG(m_length = 0;)
     }
+
+    void serialize(std::ostream& os, uint_fast8_t width, const size_t length) const {
+		DCHECK_EQ(length, m_length);
+		DCHECK_EQ(width, m_key_width);
+
+#ifndef NDEBUG
+		os.write(reinterpret_cast<const char*>(&m_key_width), sizeof(size_t));
+		os.write(reinterpret_cast<const char*>(&m_length), sizeof(size_t));
+		os.write(reinterpret_cast<const char*>(m_plain_data), sizeof(decltype(*m_plain_data)) * m_length );
+#endif //NDEBUG
+
+		const size_t blocksize = ceil_div<size_t>(width*length, storage_bitwidth);
+
+		os.write(reinterpret_cast<const char*>(m_data), sizeof(decltype(*m_data)) * blocksize );
+    }
+
+
+    void deserialize(std::istream& is, uint_fast8_t width, const size_t length) {
+        clear();
+#ifndef NDEBUG
+		is.read(reinterpret_cast<char*>(&m_key_width), sizeof(size_t));
+		DCHECK_EQ(m_key_width, width);
+		is.read(reinterpret_cast<char*>(&m_length), sizeof(size_t));
+		DCHECK_EQ(m_length, length);
+
+		DCHECK(m_plain_data == nullptr);
+		m_plain_data = reinterpret_cast<storage_type*>(malloc(sizeof(storage_type)*m_length));
+		is.read(reinterpret_cast<char*>(m_plain_data), sizeof(decltype(*m_plain_data)) * m_length );
+#endif //NDEBUG
+		const size_t blocksize = ceil_div<size_t>(width*length, storage_bitwidth);
+		DCHECK(m_data == nullptr);
+		m_data = reinterpret_cast<internal_type*>  (malloc(sizeof(internal_type)* blocksize));
+		is.read(reinterpret_cast<char*>(m_data), sizeof(decltype(*m_data)) * blocksize );
+    }
+
     
     void initialize(const uint_fast8_t width) {
 #ifndef NDEBUG
@@ -320,6 +355,8 @@ class keyvalue_group {
     using storage_type = uint64_t;
     using groupsize_type = uint32_t; //! type to address all elements in a group, limits also the bucket size
     using core_group_type = core_group<internal_t>;
+    using group_index_type = uint8_t; //! type for addressing the `i`-th bucket in a group
+
     static constexpr uint_fast8_t internal_bitwidth = sizeof(internal_type)*8;
     ON_DEBUG(size_t m_border_length;)
 
@@ -329,11 +366,59 @@ class keyvalue_group {
     core_group_type m_values; //! bucket for values
     internal_type* m_border = nullptr; //! bit vector marking the borders, stores a 1 for each m_groupsize and a zero for each m_size
     ON_DEBUG(std::vector<size_t> m_border_array;)
-    using group_index_type = uint8_t; //! type for addressing the `i`-th bucket in a group
     ON_DEBUG(group_index_type m_groupsize = 0;) // m_groupsize + m_size  = bit vector length of m_border
 
 
     public:
+
+    void serialize(std::ostream& os, const group_index_type buckets_per_group, uint_fast8_t keywidth, uint_fast8_t valuewidth) const {
+
+
+
+#ifndef NDEBUG
+		const size_t border_arraysize = m_border_array.size();
+		os.write(reinterpret_cast<const char*>(&border_arraysize), sizeof(size_t));
+		os.write(reinterpret_cast<const char*>(m_border_array.data()), sizeof(size_t) * m_border_array.size());
+        os.write(reinterpret_cast<const char*>(&m_groupsize), sizeof(decltype(m_groupsize)));
+        os.write(reinterpret_cast<const char*>(&m_border_length), sizeof(decltype(m_border_length)));
+#endif //NDEBUG
+
+		const size_t border_size = ceil_div<size_t>(m_size + 1 + buckets_per_group, internal_bitwidth);
+
+        os.write(reinterpret_cast<const char*>(&m_size), sizeof(decltype(m_size)));
+        os.write(reinterpret_cast<const char*>(m_border), sizeof(decltype(*m_border)) * border_size );
+
+		m_keys.serialize(os, keywidth, m_size);
+		m_values.serialize(os, valuewidth, m_size);
+    }
+
+
+    void deserialize(std::istream& is, const group_index_type buckets_per_group, uint_fast8_t keywidth, uint_fast8_t valuewidth) {
+        clear();
+
+#ifndef NDEBUG
+		size_t border_arraysize;
+		is.read(reinterpret_cast<char*>(&border_arraysize), sizeof(size_t));
+		m_border_array.resize(border_arraysize);
+		is.read(reinterpret_cast<char*>(m_border_array.data()), sizeof(size_t) * m_border_array.size());
+		is.read(reinterpret_cast<char*>(&m_groupsize), sizeof(decltype(m_groupsize)));
+		is.read(reinterpret_cast<char*>(&m_border_length), sizeof(decltype(m_border_length)));
+#endif //NDEBUG
+
+		is.read(reinterpret_cast<char*>(&m_size), sizeof(decltype(m_size)));
+
+		const size_t border_size = ceil_div<size_t>(m_size + 1 + buckets_per_group, internal_bitwidth);
+		DCHECK(m_border == nullptr);
+		m_border = reinterpret_cast<internal_type*>  (malloc(sizeof(decltype(*m_border)) * border_size ));
+        is.read(reinterpret_cast<char*>(m_border), sizeof(decltype(*m_border)) * border_size);
+
+
+		m_keys.deserialize(is, keywidth, m_size);
+		m_values.deserialize(is, valuewidth, m_size);
+    }
+
+
+
     keyvalue_group() = default;
 
     bool empty() const { return m_size == 0; }
@@ -1279,6 +1364,91 @@ class group_chaining_table {
 #endif
 
     //TODO: add swap, operator= and copy-constructor
+    void serialize(std::ostream& os) const {
+        m_overflow.serialize(os);
+        os.write(reinterpret_cast<const char*>(&m_key_width), sizeof(decltype(m_key_width)));
+        os.write(reinterpret_cast<const char*>(&m_value_width), sizeof(decltype(m_value_width)));
+        os.write(reinterpret_cast<const char*>(&m_buckets), sizeof(decltype(m_buckets)));
+        os.write(reinterpret_cast<const char*>(&m_elements), sizeof(decltype(m_elements)));
+        os.write(reinterpret_cast<const char*>(&m_buckets_per_group), sizeof(decltype(m_buckets_per_group)));
+
+        const uint_fast8_t quotient_width = m_hash.remainder_width(m_buckets);
+
+        const size_t cgroup_count = group_count();
+        for(size_t group = 0; group < cgroup_count; ++group) {
+            m_groups[group].serialize(os, buckets_per_group(), quotient_width, value_width());
+        }
+
+
+#ifndef NDEBUG
+        const size_t cbucket_count = bucket_count();
+        os.write(reinterpret_cast<const char*>(m_bucketsizes), sizeof(groupsize_type) * cbucket_count);
+        for(size_t bucket = 0; bucket < cbucket_count; ++bucket) {
+            if(m_bucketsizes[bucket] == 0) continue;
+            ON_DEBUG(os.write(reinterpret_cast<const char*>(m_plainkeys[bucket]), sizeof(key_type)*m_bucketsizes[bucket]));
+            ON_DEBUG(os.write(reinterpret_cast<const char*>(m_plainvalues[bucket]), sizeof(value_type)*m_bucketsizes[bucket]));
+        }
+#endif// NDEBUG
+    }
+
+
+    void deserialize(std::istream& is) {
+        clear();
+        m_overflow.deserialize(is);
+        decltype(m_buckets) buckets;
+        is.read(reinterpret_cast<char*>(&m_key_width), sizeof(decltype(m_key_width)));
+        is.read(reinterpret_cast<char*>(&m_value_width), sizeof(decltype(m_value_width)));
+        m_hash = hash_mapping_type(m_key_width);
+        is.read(reinterpret_cast<char*>(&buckets), sizeof(decltype(buckets)));
+        is.read(reinterpret_cast<char*>(&m_elements), sizeof(decltype(m_elements)));
+        is.read(reinterpret_cast<char*>(&m_buckets_per_group), sizeof(decltype(m_buckets_per_group)));
+        reserve(1ULL<<buckets); //TODO: can be in conflict with the set m_buckets_per_group
+        DDCHECK_EQ(m_buckets, buckets);
+
+		const uint_fast8_t quotient_width = m_hash.remainder_width(m_buckets);
+        const size_t cgroup_count = group_count();
+        for(size_t group = 0; group < cgroup_count; ++group) {
+            m_groups[group].deserialize(is, buckets_per_group(), quotient_width, value_width());
+        }
+
+#ifndef NDEBUG
+        const size_t cbucket_count = bucket_count();
+        size_t restored_elements = 0;
+        is.read(reinterpret_cast<char*>(m_bucketsizes), sizeof(groupsize_type) * cbucket_count);
+        for(size_t bucket = 0; bucket < cbucket_count; ++bucket) {
+			DCHECK_EQ(m_bucketsizes[bucket], bucket_size(bucket));
+		}
+
+        for(size_t bucket = 0; bucket < cbucket_count; ++bucket) {
+            if(m_bucketsizes[bucket] == 0) continue;
+            {
+                const auto bucket_size = m_bucketsizes[bucket];
+                key_type*& bucket_plainkeys = m_plainkeys[bucket];
+                bucket_plainkeys = reinterpret_cast<key_type*>  (realloc(bucket_plainkeys, sizeof(key_type)*bucket_size));
+                is.read(reinterpret_cast<char*>(bucket_plainkeys), sizeof(key_type)*m_bucketsizes[bucket]);
+
+                value_type*& bucket_plainvalues = m_plainvalues[bucket];
+                bucket_plainvalues = reinterpret_cast<value_type*>  (realloc(bucket_plainvalues, sizeof(value_type)*bucket_size));
+                is.read(reinterpret_cast<char*>(bucket_plainvalues), sizeof(value_type)*m_bucketsizes[bucket]);
+
+                restored_elements += m_bucketsizes[bucket];
+
+				keyvalue_group_type& group = m_groups[bucketgroup(bucket)];
+                for(size_t i = 0; i < bucket_size; ++i) { 
+					const key_type read_quotient = group.read_key(rank_in_group(bucket),i, quotient_width);
+					const key_type read_key = m_hash.inv_map(read_quotient, bucket, m_buckets);
+
+					const value_type read_value = group.read_value(rank_in_group(bucket), i, value_width());
+
+                    DDCHECK_EQ(read_key, bucket_plainkeys[i]);
+                    DDCHECK_EQ(read_value, bucket_plainvalues[i]);
+                }
+            }
+#endif//NDEBUG
+
+        }
+        DDCHECK_EQ(m_elements, restored_elements);
+    }
 
 
 };
