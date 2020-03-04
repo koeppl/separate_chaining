@@ -47,8 +47,8 @@ class core_group {
     }
 
     void serialize(std::ostream& os, uint_fast8_t width, const size_t length) const {
-		DCHECK_EQ(length, m_length);
-		DCHECK_EQ(width, m_key_width);
+		DDCHECK_EQ(length, m_length);
+		DDCHECK_EQ(width, m_key_width);
 
 #ifndef NDEBUG
 		os.write(reinterpret_cast<const char*>(&m_key_width), sizeof(size_t));
@@ -66,11 +66,11 @@ class core_group {
         clear();
 #ifndef NDEBUG
 		is.read(reinterpret_cast<char*>(&m_key_width), sizeof(size_t));
-		DCHECK_EQ(m_key_width, width);
+		DDCHECK_EQ(m_key_width, width);
 		is.read(reinterpret_cast<char*>(&m_length), sizeof(size_t));
-		DCHECK_EQ(m_length, length);
+		DDCHECK_EQ(m_length, length);
 
-		DCHECK(m_plain_data == nullptr);
+		DDCHECK(m_plain_data == nullptr);
 		m_plain_data = reinterpret_cast<storage_type*>(malloc(sizeof(storage_type)*m_length));
 		is.read(reinterpret_cast<char*>(m_plain_data), sizeof(decltype(*m_plain_data)) * m_length );
 #endif //NDEBUG
@@ -1416,7 +1416,7 @@ class group_chaining_table {
         size_t restored_elements = 0;
         is.read(reinterpret_cast<char*>(m_bucketsizes), sizeof(groupsize_type) * cbucket_count);
         for(size_t bucket = 0; bucket < cbucket_count; ++bucket) {
-			DCHECK_EQ(m_bucketsizes[bucket], bucket_size(bucket));
+			DDCHECK_EQ(m_bucketsizes[bucket], bucket_size(bucket));
 		}
 
         for(size_t bucket = 0; bucket < cbucket_count; ++bucket) {
@@ -1444,10 +1444,9 @@ class group_chaining_table {
                     DDCHECK_EQ(read_value, bucket_plainvalues[i]);
                 }
             }
-#endif//NDEBUG
-
         }
         DDCHECK_EQ(m_elements, restored_elements);
+#endif//NDEBUG
     }
 
 
