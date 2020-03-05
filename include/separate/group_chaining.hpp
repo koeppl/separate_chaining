@@ -1016,14 +1016,28 @@ class group_chaining_table {
     }
     const navigator rbegin_nav() {
         const size_t cbucket_count = bucket_count();
+        const size_t cgroup_count = group_count();
         if(m_overflow.size() > 0) return { *this, cbucket_count, m_overflow.size() };
         if(cbucket_count == 0) return end_nav();
-        for(size_t bucket = cbucket_count-1; bucket >= 0;  --bucket) {
-            const keyvalue_group_type& group = m_groups[bucketgroup(bucket)];
-            if(group.bucketsize(rank_in_group(bucket)) > 0) {
-                return { *this, bucket, 0 };
-            }
-        }
+		for(size_t group_it = cgroup_count; group_it > 0; --group_it) { //! since we count backwards, we have to subtract 1 from group_it and bucket_it to get the real index
+            const keyvalue_group_type& group = m_groups[group_it-1];
+			if(group.size() > 0) {
+				for(size_t bucket_it = buckets_per_group(); bucket_it > 0; --bucket_it) { 
+					const size_t elements = group.bucketsize(rank_in_group(bucket_it-1));
+					if(elements > 0) {
+						return { *this, (group_it-1) * buckets_per_group() + (bucket_it-1), elements };
+					}
+				}
+			}
+		}
+	    //
+        // const size_t cbucket_count = bucket_count();
+        // for(size_t bucket = cbucket_count-1; bucket >= 0;  --bucket) {
+        //     const keyvalue_group_type& group = m_groups[bucketgroup(bucket)];
+        //     if(group.bucketsize(rank_in_group(bucket)) > 0) {
+        //         return { *this, bucket, 0 };
+        //     }
+        // }
         return end_nav();
     }
     const navigator rend_nav() { return end_nav(); }
@@ -1035,13 +1049,30 @@ class group_chaining_table {
         return { *this, -1ULL, -1ULL };
     }
     const iterator begin() {
+
+        // const size_t cbucket_count = bucket_count();
+        // for(size_t bucket = 0; bucket < cbucket_count;  ++bucket) {
+        //     const keyvalue_group_type& group = m_groups[bucketgroup(bucket)];
+        //     if(group.bucketsize(rank_in_group(bucket)) > 0) {
+        //         return { *this, bucket, 0 };
+        //     }
+        // }
+		//
+		
+        const size_t cgroup_count = group_count();
+		for(size_t group_it = 0; group_it < cgroup_count; ++group_it) { 
+            const keyvalue_group_type& group = m_groups[group_it];
+			if(group.size() > 0) {
+				for(size_t bucket_it = 0; bucket_it < buckets_per_group(); ++bucket_it) { 
+					const size_t elements = group.bucketsize(rank_in_group(bucket_it));
+					if(elements > 0) {
+						return { *this, (group_it) * buckets_per_group() + (bucket_it), 0 };
+					}
+				}
+			}
+		}
+
         const size_t cbucket_count = bucket_count();
-        for(size_t bucket = 0; bucket < cbucket_count;  ++bucket) {
-            const keyvalue_group_type& group = m_groups[bucketgroup(bucket)];
-            if(group.bucketsize(rank_in_group(bucket)) > 0) {
-                return { *this, bucket, 0 };
-            }
-        }
         if(m_overflow.size() > 0) return { *this, cbucket_count, 0 };
         return end();
     }
