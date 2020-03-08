@@ -3,4 +3,4 @@
 	url = https://github.com/tudocomp/bit_span.git
 [submodule "external/broadwordsearch"]
 	path = external/broadwordsearch
-	url = git@github.com:koeppl/broadwordsearch.git
+	url = https://github.com/koeppl/broadwordsearch.git

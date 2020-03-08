@@ -24,7 +24,8 @@ class core_group {
 
     private:
     ON_DEBUG(size_t m_key_width;)
-    ON_DEBUG(size_t m_length;)
+    ON_DEBUG(size_t m_length;)  //! number of keys stored in `m_data`
+    ON_DEBUG(size_t m_blocksize;) //! number of `internal_type` entries in `m_data`
     ON_DEBUG(storage_type* m_plain_data = nullptr;) //!bucket for keys, debug purpose only
     internal_type* m_data = nullptr; //!bucket for keys
 
@@ -43,7 +44,7 @@ class core_group {
         }
         m_plain_data = nullptr;
         )
-        ON_DEBUG(m_length = 0;)
+        ON_DEBUG(m_length = 0; m_blocksize = 0;)
     }
 
     void serialize(std::ostream& os, uint_fast8_t width, const size_t length) const {
@@ -53,6 +54,7 @@ class core_group {
 #ifndef NDEBUG
 		os.write(reinterpret_cast<const char*>(&m_key_width), sizeof(size_t));
 		os.write(reinterpret_cast<const char*>(&m_length), sizeof(size_t));
+		os.write(reinterpret_cast<const char*>(&m_blocksize), sizeof(size_t));
 		os.write(reinterpret_cast<const char*>(m_plain_data), sizeof(decltype(*m_plain_data)) * m_length );
 #endif //NDEBUG
 
@@ -69,12 +71,14 @@ class core_group {
 		DDCHECK_EQ(m_key_width, width);
 		is.read(reinterpret_cast<char*>(&m_length), sizeof(size_t));
 		DDCHECK_EQ(m_length, length);
+		is.read(reinterpret_cast<char*>(&m_blocksize), sizeof(size_t));
 
 		DDCHECK(m_plain_data == nullptr);
 		m_plain_data = reinterpret_cast<storage_type*>(malloc(sizeof(storage_type)*m_length));
 		is.read(reinterpret_cast<char*>(m_plain_data), sizeof(decltype(*m_plain_data)) * m_length );
 #endif //NDEBUG
 		const size_t blocksize = ceil_div<size_t>(width*length, storage_bitwidth);
+		DCHECK_LE(blocksize, m_blocksize);
 		DCHECK(m_data == nullptr);
 		m_data = reinterpret_cast<internal_type*>  (malloc(sizeof(internal_type)* blocksize));
 		is.read(reinterpret_cast<char*>(m_data), sizeof(decltype(*m_data)) * blocksize );
@@ -88,6 +92,7 @@ class core_group {
        m_plain_data[0] = 0;
        m_key_width = width;
        m_length = 0;
+	   m_blocksize = ceil_div<size_t>(width, storage_bitwidth);
        DDCHECK(m_data == nullptr);
 #endif//NDEBUG
 
@@ -167,11 +172,12 @@ class core_group {
       m_plain_data[index] = key;
 #endif //NDEBUG
        const size_t oldblocksize = ceil_div<size_t>(key_width*length, storage_bitwidth);
-       const size_t newblocksize = ceil_div<size_t>(key_width*(length+1), storage_bitwidth);
+       const size_t newblocksize = ceil_div<size_t>(key_width*(length+2), storage_bitwidth); //TODO: length+2 instead of length+1 due to valgrind?
        if(oldblocksize < newblocksize) {
            m_data = reinterpret_cast<internal_type*>  (realloc(m_data, sizeof(internal_type)* newblocksize));
            m_data[newblocksize-1] = 0;
        }
+	   ON_DEBUG(m_blocksize = newblocksize;)
 
 	   // //DEBUG!! 
 	   // uint64_t* dummy_data = new uint64_t[newblocksize];
@@ -202,6 +208,7 @@ class core_group {
 			   //! start with the largest block, and move its elements one to the right
 			   for(size_t i = 0; i < ( (length-index)*key_width) / 64; ++i) {
 				   const size_t read_chunk = tdc::tdc_sdsl::bits_impl<>::read_int(read_it, read_offset, 64);
+				   DDCHECK_LE((reinterpret_cast<size_t>(write_it) - reinterpret_cast<size_t>(m_data))*8 + write_offset + 64, 8*sizeof(internal_type)* m_blocksize);
 				   tdc::tdc_sdsl::bits_impl<>::write_int(write_it, read_chunk, write_offset, 64);
 				   tdc::tdc_sdsl::bits_impl<>::move_left(read_it, read_offset, 64);
 				   tdc::tdc_sdsl::bits_impl<>::move_left((const uint64_t*&)write_it, write_offset, 64);
@@ -224,8 +231,10 @@ class core_group {
 			   DCHECK_GE(remaining_bits, 0);
 
 			   const size_t read_chunk = tdc::tdc_sdsl::bits_impl<>::read_int(read_it, read_offset, remaining_bits);
+			   DDCHECK_LE((reinterpret_cast<size_t>(write_it) - reinterpret_cast<size_t>(m_data))*8 + write_offset+ remaining_bits, 8*sizeof(internal_type)* m_blocksize);
 			   tdc::tdc_sdsl::bits_impl<>::write_int(write_it, read_chunk, write_offset, remaining_bits);
 		   }
+		   DDCHECK_LE((reinterpret_cast<size_t>(read_it) - reinterpret_cast<size_t>(m_data))*8 + read_offset + key_width, 8*sizeof(internal_type)* m_blocksize);
 		   tdc::tdc_sdsl::bits_impl<>::write_int(read_it, key, read_offset, key_width);
 	   }
 #ifndef NDEBUG
@@ -305,6 +314,7 @@ class core_group {
        const uint64_t* it = reinterpret_cast<uint64_t*>(m_data +  (position_from * key_width)/storage_bitwidth);
 
        for(size_t i = 0; i < position_to-position_from; ++i) { // TODO: could be enhanced with broadword search
+		   DDCHECK_LE((reinterpret_cast<size_t>(it) - reinterpret_cast<size_t>(m_data))*8 + offset + key_width, 8*sizeof(internal_type)* m_blocksize);
             const storage_type read_key = tdc::tdc_sdsl::bits_impl<>::read_int_and_move(it, offset, key_width);
             DDCHECK_EQ(read_key, m_plain_data[i+position_from]);
             if(read_key == key) {
@@ -324,7 +334,7 @@ class core_group {
         other.m_data = nullptr;
         ON_DEBUG(m_plain_data = std::move(other.m_plain_data));
         ON_DEBUG(other.m_plain_data = nullptr);
-        ON_DEBUG(m_length = other.m_length; other.m_plain_data = 0;)
+        ON_DEBUG(m_length = other.m_length; m_blocksize = other.m_blocksize; other.m_plain_data = 0;)
     }
     // core_group(storage_type*&& keys) 
     //     : m_plain_data(std::move(keys))
@@ -338,7 +348,7 @@ class core_group {
         other.m_data = nullptr;
         ON_DEBUG(m_plain_data = std::move(other.m_plain_data));
         ON_DEBUG(other.m_plain_data = nullptr);
-        ON_DEBUG(m_length = other.m_length; other.m_length = 0;)
+        ON_DEBUG(m_length = other.m_length; m_blocksize = other.m_blocksize; other.m_length = 0;)
         return *this;
     }
 
@@ -348,7 +358,8 @@ class core_group {
  * `internal_t` is a tradeoff between the number of mallocs and unused space, as it defines the block size in which elements are stored, 
  * i.e., its memory consuption is quantisized by this type's byte size
 **/
-template<class internal_t = uint8_t>
+template<class internal_t = uint64_t> 
+//!TODO: setting `internal_t` to `uint8_t` improves space a little bit, but makes valgrind nervous, and may (?) lead to memory corruption with multiple hash tables. To fix this, we need sdsl::bits for uint8_t blocks
 class keyvalue_group {
     public:
     using internal_type = internal_t;
@@ -961,7 +972,7 @@ class group_chaining_table {
 			//tmp_map.m_buckets_per_group = std::min<size_t>(255, std::max<size_t>(32, size() / group_count()));
             tmp_map.reserve(new_size);
 			//tmp_map.m_buckets_per_group = 50; //std::min<size_t>(255, std::max<size_t>(3, size() / group_count()));
-#if STATS_ENABLED && PRINT_STATS
+#if defined(STATS_ENABLED) && defined(PRINT_STATS)
             tdc::StatPhase statphase(std::string("resizing to ") + std::to_string(reserve_bits));
             print_stats(statphase);
 #endif
@@ -1209,6 +1220,7 @@ class group_chaining_table {
         if(!group.initialized()) { group.initialize(buckets_per_group(), quotient_width, value_width());}
 
 #ifndef NDEBUG
+#ifdef HEAVY_DEBUG
         {
             size_t elements = 0;
             for(size_t group_i = 0; group_i < group_count(); ++group_i) {
@@ -1222,6 +1234,7 @@ class group_chaining_table {
             elements += m_overflow.size();
             DDCHECK_EQ(elements+1, m_elements);
         }
+#endif//HEAVY_DEBUG
 
 
         value_type*& bucket_plainvalues = m_plainvalues[bucket];
@@ -1341,7 +1354,7 @@ class group_chaining_table {
         return 1;
     }
 
-#if STATS_ENABLED && PRINT_STATS
+#if defined(STATS_ENABLED)
     void print_stats(tdc::StatPhase& statphase) {
             statphase.log("class", typeid(class_type).name());
             statphase.log("size", size());

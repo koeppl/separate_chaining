@@ -1,5 +1,5 @@
-#ifndef DCHECK_HPP
-#define DCHECK_HPP
+// #ifndef DCHECK_HPP
+// #define DCHECK_HPP
 #pragma once
 
 
@@ -35,6 +35,15 @@
 #define DDCHECK_GE(x, y) 
 #define DDCHECK_GT(x, y) 
 #else//NDEBUG
+#if defined(DCHECK)
+#define DDCHECK(x) DCHECK(x)
+#define DDCHECK_EQ(x, y) DCHECK_EQ(x, y) 
+#define DDCHECK_NE(x, y) DCHECK_NE(x, y) 
+#define DDCHECK_LE(x, y) DCHECK_LE(x, y) 
+#define DDCHECK_LT(x, y) DCHECK_LT(x, y) 
+#define DDCHECK_GE(x, y) DCHECK_GE(x, y) 
+#define DDCHECK_GT(x, y) DCHECK_GT(x, y) 
+#else//defined(DCHECK)
 #define DDCHECK_(x,y,z) \
   if (!(x)) throw std::runtime_error(std::string(" in file ") + __FILE__ + ':' + std::to_string(__LINE__) + (" the check failed: " #x) + ", we got " + std::to_string(y) + " vs " + std::to_string(z))
 #define DDCHECK(x) \
@@ -45,6 +54,7 @@
 #define DDCHECK_LT(x, y) DDCHECK_((x) < (y) ,x,y)
 #define DDCHECK_GE(x, y) DDCHECK_((x) >= (y),x,y )
 #define DDCHECK_GT(x, y) DDCHECK_((x) > (y) ,x,y)
+#endif//defined(DCHECK)
 #endif //NDEBUG
 #endif //DDCHECK
 
@@ -70,4 +80,4 @@
 //     return ss.str();
 // }
 
-#endif /* DCHECK_HPP */
+// #endif /* DCHECK_HPP */

@@ -5,6 +5,7 @@
 #include <limits>
 #include <algorithm>
 #include "dcheck.hpp"
+#include "math.hpp"
 
 namespace separate_chaining {
 
@@ -85,28 +86,28 @@ class keysplit_adapter {
     size_type erase(const key_type& key) {
        const uint_fast8_t key_width = bit_width(key);
        const uint_fast8_t slot = key_width == 0 ? 0 : (key_width-1)/m_interval;
-       DCHECK_LT(slot, m_length);
+       DDCHECK_LT(slot, m_length);
        return m_maps[slot]->erase(key);
     }
 
     const_iterator find(const key_type& key) const {
        const uint_fast8_t key_width = bit_width(key);
        const uint_fast8_t slot = key_width == 0 ? 0 : (key_width-1)/m_interval;
-       DCHECK_LT(slot, m_length);
+       DDCHECK_LT(slot, m_length);
        return m_maps[slot]->find(key);
     }
 
     navigator operator[](const key_type& key) {
        const uint_fast8_t key_width = bit_width(key);
        const uint_fast8_t slot = key_width == 0 ? 0 : (key_width-1)/m_interval;
-       DCHECK_LT(slot, m_length);
+       DDCHECK_LT(slot, m_length);
        return (*m_maps[slot])[key];
     }
 
     size_type count(const key_type& key ) const {
        const uint_fast8_t key_width = bit_width(key);
        const uint_fast8_t slot = key_width == 0 ? 0 : (key_width-1)/m_interval;
-       DCHECK_LT(slot, m_length);
+       DDCHECK_LT(slot, m_length);
        return m_maps[slot]->count(key);
     }
 };
