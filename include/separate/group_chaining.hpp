@@ -78,7 +78,7 @@ class core_group {
 		is.read(reinterpret_cast<char*>(m_plain_data), sizeof(decltype(*m_plain_data)) * m_length );
 #endif //NDEBUG
 		const size_t blocksize = ceil_div<size_t>(width*length, storage_bitwidth);
-		DCHECK_LE(blocksize, m_blocksize);
+		DDCHECK_LE(blocksize, m_blocksize);
 		DCHECK(m_data == nullptr);
 		m_data = reinterpret_cast<internal_type*>  (malloc(sizeof(internal_type)* blocksize));
 		is.read(reinterpret_cast<char*>(m_data), sizeof(decltype(*m_data)) * blocksize );
