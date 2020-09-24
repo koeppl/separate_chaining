@@ -368,7 +368,7 @@ class keyvalue_group {
        m_values.initialize(valuewidth);
        m_size = 0;
 
-       DDCHECK_LT(groupsize, std::numeric_limits<decltype(m_groupsize)>::max());
+       DDCHECK_LE(groupsize, std::numeric_limits<decltype(m_groupsize)>::max());
        ON_DEBUG(m_groupsize = groupsize);
        m_border = reinterpret_cast<internal_type*>  (malloc(sizeof(internal_type)* ceil_div<size_t>(groupsize+1, internal_bitwidth) ));
        memset(m_border, static_cast<char>(-1ULL), ceil_div<size_t>(groupsize+1, 8)); // groupsize+1 as we use the last '1' as a dummy border
