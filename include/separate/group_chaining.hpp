@@ -390,7 +390,7 @@ class keyvalue_group {
 #ifndef NDEBUG
 		const size_t border_arraysize = m_border_array.size();
 		os.write(reinterpret_cast<const char*>(&border_arraysize), sizeof(size_t));
-		os.write(reinterpret_cast<const char*>(m_border_array.data()), sizeof(size_t) * m_border_array.size());
+		os.write(reinterpret_cast<const char*>(m_border_array.data()), sizeof(size_t) * border_arraysize);
         os.write(reinterpret_cast<const char*>(&m_groupsize), sizeof(decltype(m_groupsize)));
         os.write(reinterpret_cast<const char*>(&m_border_length), sizeof(decltype(m_border_length)));
 #endif //NDEBUG
@@ -398,10 +398,11 @@ class keyvalue_group {
 		const size_t border_size = ceil_div<size_t>(m_size + 1 + buckets_per_group, internal_bitwidth);
 
         os.write(reinterpret_cast<const char*>(&m_size), sizeof(decltype(m_size)));
-        os.write(reinterpret_cast<const char*>(m_border), sizeof(decltype(*m_border)) * border_size );
-
-		m_keys.serialize(os, keywidth, m_size);
-		m_values.serialize(os, valuewidth, m_size);
+		if(m_size > 0) {
+			os.write(reinterpret_cast<const char*>(m_border), sizeof(decltype(*m_border)) * border_size );
+			m_keys.serialize(os, keywidth, m_size);
+			m_values.serialize(os, valuewidth, m_size);
+		}
     }
 
 
@@ -412,7 +413,7 @@ class keyvalue_group {
 		size_t border_arraysize;
 		is.read(reinterpret_cast<char*>(&border_arraysize), sizeof(size_t));
 		m_border_array.resize(border_arraysize);
-		is.read(reinterpret_cast<char*>(m_border_array.data()), sizeof(size_t) * m_border_array.size());
+		is.read(reinterpret_cast<char*>(m_border_array.data()), sizeof(size_t) * border_arraysize);
 		is.read(reinterpret_cast<char*>(&m_groupsize), sizeof(decltype(m_groupsize)));
 		is.read(reinterpret_cast<char*>(&m_border_length), sizeof(decltype(m_border_length)));
 #endif //NDEBUG
@@ -421,12 +422,12 @@ class keyvalue_group {
 
 		const size_t border_size = ceil_div<size_t>(m_size + 1 + buckets_per_group, internal_bitwidth);
 		DCHECK(m_border == nullptr);
-		m_border = reinterpret_cast<internal_type*>  (malloc(sizeof(decltype(*m_border)) * border_size ));
-        is.read(reinterpret_cast<char*>(m_border), sizeof(decltype(*m_border)) * border_size);
-
-
-		m_keys.deserialize(is, keywidth, m_size);
-		m_values.deserialize(is, valuewidth, m_size);
+		if(m_size > 0) {
+			m_border = reinterpret_cast<internal_type*>  (malloc(sizeof(decltype(*m_border)) * border_size ));
+			is.read(reinterpret_cast<char*>(m_border), sizeof(decltype(*m_border)) * border_size);
+			m_keys.deserialize(is, keywidth, m_size);
+			m_values.deserialize(is, valuewidth, m_size);
+		}
     }
 
 
@@ -1423,6 +1424,7 @@ class group_chaining_table {
         os.write(reinterpret_cast<const char*>(&m_buckets), sizeof(decltype(m_buckets)));
         os.write(reinterpret_cast<const char*>(&m_elements), sizeof(decltype(m_elements)));
         os.write(reinterpret_cast<const char*>(&m_buckets_per_group), sizeof(decltype(m_buckets_per_group)));
+		if(m_elements == 0) return;
 
         const uint_fast8_t quotient_width = m_hash.remainder_width(m_buckets);
 
@@ -1454,8 +1456,13 @@ class group_chaining_table {
         is.read(reinterpret_cast<char*>(&buckets), sizeof(decltype(buckets)));
         is.read(reinterpret_cast<char*>(&m_elements), sizeof(decltype(m_elements)));
         is.read(reinterpret_cast<char*>(&m_buckets_per_group), sizeof(decltype(m_buckets_per_group)));
+		ON_DEBUG(const size_t _buckets_per_group = m_buckets_per_group);
+
+		if(m_elements == 0) return;
+
         reserve(1ULL<<buckets); //TODO: can be in conflict with the set m_buckets_per_group
         DDCHECK_EQ(m_buckets, buckets);
+		DDCHECK_EQ(_buckets_per_group, m_buckets_per_group);
 
 		const uint_fast8_t quotient_width = m_hash.remainder_width(m_buckets);
         const size_t cgroup_count = group_count();
