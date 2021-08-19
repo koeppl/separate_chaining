@@ -1,3 +1,4 @@
+#pragma once
 #include <tudocomp/util/sdsl_bits.hpp>
 #include "dcheck.hpp"
 #include "bucket.hpp"
@@ -79,7 +80,7 @@ class core_group {
 #endif //NDEBUG
 		const size_t blocksize = ceil_div<size_t>(width*length, storage_bitwidth);
 		DDCHECK_LE(blocksize, m_blocksize);
-		DCHECK(m_data == nullptr);
+		DDCHECK(m_data == nullptr);
 		m_data = reinterpret_cast<internal_type*>  (malloc(sizeof(internal_type)* blocksize));
 		is.read(reinterpret_cast<char*>(m_data), sizeof(decltype(*m_data)) * blocksize );
     }
@@ -743,6 +744,11 @@ class group_chaining_table {
     ON_DEBUG(groupsize_type* m_bucketsizes = nullptr;) //! size of each bucket for debugging purposes
     // END member variables
 
+	group_chaining_table& operator=(group_chaining_table&&other) {
+		clear();
+		swap(other);
+		return *this;
+	}
 
     void swap(group_chaining_table& other) {
         // DDCHECK_EQ(m_width, other.m_width);
@@ -759,7 +765,6 @@ class group_chaining_table {
         std::swap(m_elements, other.m_elements);
         std::swap(m_overflow, other.m_overflow);
     }
-
 
 
 
@@ -949,7 +954,9 @@ class group_chaining_table {
 
 
     //! Allocate `reserve` buckets. Do not confuse with reserving space for `reserve` elements.
-    void reserve(size_t reserve) {
+	//! setting `new_key_width` results in setting a new key width. `new_key_width` must be at least `key_width()` to gurantee corruption freeness
+    void reserve(size_t reserve, size_t new_key_width = 0) {
+		if(new_key_width == 0) { new_key_width = key_width(); }
         uint_fast8_t reserve_bits = most_significant_bit(reserve);
         if(1ULL<<reserve_bits != reserve) ++reserve_bits;
         const size_t new_size = 1ULL<<reserve_bits;
@@ -968,7 +975,7 @@ class group_chaining_table {
             m_buckets = reserve_bits;
             m_overflow.resize_buckets(new_size, key_width(), value_width());
         } else {
-            group_chaining_table tmp_map(m_key_width, m_value_width);
+            group_chaining_table tmp_map(new_key_width, m_value_width);
 			tmp_map.m_buckets_per_group = 64; //std::min<size_t>(255, std::max<size_t>(3, size() / (1+bucket_count())));
 			//tmp_map.m_buckets_per_group = std::min<size_t>(255, std::max<size_t>(32, size() / group_count()));
             tmp_map.reserve(new_size);
@@ -1158,6 +1165,7 @@ class group_chaining_table {
      * If the key is not in the table, the location is the bucket where the key should be hashed into, and the position is -1.
      */
     std::pair<size_t, size_t> locate(const key_type& key) const {
+		DDCHECK_GT(m_buckets, 0);
         if(m_buckets == 0) throw std::runtime_error("cannot query empty hash table");
 
         const auto [quotient, bucket] = m_hash.map(key, m_buckets);
