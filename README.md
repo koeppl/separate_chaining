@@ -111,6 +111,21 @@ The class `bucket_table` wraps a single bucket in a map/set interface.
   - a C++17 compiler like gcc or clang 
   - gtest (optional) for tests
 
+## Compilation
+
+```bash
+git submodule init
+git submodule update
+mkdir -p build
+cd build
+cmake ..
+make
+./example_map
+```
+
+There is also a `Dockerfile` available that runs the above commands on an environment having 
+`g++` and `cmake` installed.
+
 ## Outlook
 It is possible to extend this approach for Cuckoo Hashing with multiple hash functions.
 

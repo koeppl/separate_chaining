@@ -10,6 +10,7 @@ T random_int(const T& maxvalue) {
 }
 
 int main() {
+	cout << "Running tests..." << std::endl;
 
 	// separate_chaining::group::group_chaining_table<> table;
 	// for(size_t i = 0; i < 100; ++i) {
@@ -38,7 +39,6 @@ int main() {
 		DCHECK_EQ(kvgroup.read(i % groups, i/groups, 32, 32).second, i);
 		DCHECK_EQ(kvgroup.find(i % groups, i, 32), i / groups);
 	}
-	cout << "Hello, World!";
 	kvgroup.clear();
    }
 
@@ -83,5 +83,6 @@ int main() {
 
 
 
-	return 0;
+   cout << "No errors occured!" << std::endl;
+   return 0;
 }
