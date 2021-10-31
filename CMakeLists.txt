@@ -32,13 +32,20 @@ install(FILES separate_chaining_map.hpp DESTINATION include)
 add_executable  (example_map example_map.cpp)
 target_link_libraries(example_map glog pthread ${GLOG_LIBRARY})
 
+##########
+# glog
+##########
+
+# FIND_LIBRARY(GLOG_LIBRARY glog)
+# FIND_PATH(GLOG_INCLUDE_DIR "glog/logging.h")
+if(NOT Glog_FOUND)
+    add_subdirectory(external/glog)
+    include_directories(external/glog/)
+endif(NOT Glog_FOUND)
 
 ##########
 # TESTS
 ##########
-
-FIND_LIBRARY(GLOG_LIBRARY glog)
-FIND_PATH(GLOG_INCLUDE_DIR "glog/logging.h")
 
 find_package(GTest)
 if(GTEST_FOUND)
