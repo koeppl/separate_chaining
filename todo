@@ -1,0 +1,20 @@
+the iterator can be made fully functional 
+
+make elements private in hash table
+
+
+contestants:
+- sparse map from google
+- https://github.com/Tessil/sparse-map
+- bonsai hash tables
+
+describe AVX2 + compact hashing with an example
+
+show that with `uint_t` approach, hashing 40, 48-bits, etc., is possible
+
+use data structure in LZ78 computation
+
+implement a bonsai trie data structure with this hash table
+
+compare memory overhead of this hash table with a hash table using open addressing, since we store bucket sizes + bucket pointers
+Which max-load-factor is needed to compensate the open addressing leaving empty spots?

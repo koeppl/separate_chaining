@@ -4,3 +4,6 @@
 [submodule "external/broadwordsearch"]
 	path = external/broadwordsearch
 	url = https://github.com/koeppl/broadwordsearch.git
+[submodule "external/glog"]
+	path = external/glog
+	url = https://github.com/google/glog

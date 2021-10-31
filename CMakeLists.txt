@@ -30,7 +30,7 @@ install(FILES separate_chaining_map.hpp DESTINATION include)
 ##########
 
 add_executable  (example_map example_map.cpp)
-target_link_libraries(example_map gtest pthread ${GLOG_LIBRARY})
+target_link_libraries(example_map glog pthread ${GLOG_LIBRARY})
 
 
 ##########
@@ -41,20 +41,22 @@ FIND_LIBRARY(GLOG_LIBRARY glog)
 FIND_PATH(GLOG_INCLUDE_DIR "glog/logging.h")
 
 find_package(GTest)
-include_directories(${GTEST_INCLUDE_DIR})
+if(GTEST_FOUND)
+    include_directories(${GTEST_INCLUDE_DIR})
 
-file(GLOB_RECURSE testsources RELATIVE ${CMAKE_SOURCE_DIR} "test/*.cpp")
+    file(GLOB_RECURSE testsources RELATIVE ${CMAKE_SOURCE_DIR} "test/*.cpp")
 
-enable_testing()
+    enable_testing()
 
-foreach(testsource ${testsources})
+    foreach(testsource ${testsources})
 	string( REPLACE ".cpp" "" testpath ${testsource} )
 	get_filename_component(testname ${testpath} NAME)
 	add_executable(test_${testname} ${testsource})
 	target_include_directories(test_${testname} PUBLIC test)
 	target_link_libraries(test_${testname} gtest pthread ${GLOG_LIBRARY})
 	add_test(NAME ${testname} COMMAND test_${testname})
-endforeach()
+    endforeach()
+endif(GTEST_FOUND)
 
 
 MESSAGE( STATUS "With Gtest?: " ${GTEST_INCLUDE_DIR} )
